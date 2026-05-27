@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How AdamW shrinks a runaway weight</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bug: #dc2626;
+      --bug-soft: #fee2e2;
+      --fix: #059669;
+      --fix-soft: #d1fae5;
+      --accent: #2563eb;
+      --warn: #f97316;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --neuron: #1e293b;
+      --neuron-active: #2563eb;
+      --connection: #94a3b8;
+      --connection-neg: #cbd5e1;
+      --overfit: #f97316;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+        Arial, sans-serif;
+      background: #fafafa;
+      color: var(--ink);
+    }
+    .mono {
+      font-family: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Network SVG styling */
+    .connection {
+      transition: stroke-width 0.4s ease, stroke 0.3s ease, opacity 0.3s ease;
+      stroke-linecap: round;
+    }
+    .connection.overfit {
+      filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.4));
+    }
+    .neuron {
+      transition: fill 0.3s ease, r 0.3s ease;
+    }
+    .pulse {
+      pointer-events: none;
+      opacity: 0;
+    }
+    .pulse.active {
+      animation: pulseAnim 0.9s ease-in-out forwards;
+    }
+    .pulse.backward {
+      animation: pulseAnimBack 0.9s ease-in-out forwards;
+    }
+    @keyframes pulseAnim {
+      0%   { opacity: 0; offset-distance: 0%; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { opacity: 0; offset-distance: 100%; }
+    }
+    @keyframes pulseAnimBack {
+      0%   { opacity: 0; offset-distance: 100%; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { opacity: 0; offset-distance: 0%; }
+    }
+
+    /* Phase pill */
+    .phase-pill {
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* Optimizer toggle */
+    .opt-btn {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .opt-btn.active.bug-style {
+      background: var(--bug);
+      color: white;
+      border-color: var(--bug);
+    }
+    .opt-btn.active.fix-style {
+      background: var(--fix);
+      color: white;
+      border-color: var(--fix);
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .btn-primary:active {
+      transform: scale(0.97);
+    }
+    .btn-primary:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: white;
+      color: var(--ink);
+      border: 1px solid #cbd5e1;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover {
+      background: #f8fafc;
+    }
+  </style>
+</head>
+<body>
+  <main class="max-w-7xl mx-auto px-6 py-6">
+
+    <!-- ===================== HEADER ===================== -->
+    <header class="mb-5">
+      <h1 class="text-3xl font-bold tracking-tight">How AdamW shrinks a runaway weight</h1>
+      <p class="text-base text-slate-600 mt-1 max-w-3xl">
+        One weight has grown way too large — that's a red flag for overfitting.
+        Watch a tiny network train and see how each optimizer handles that weight differently.
+        The big orange connection is the one to watch.
+      </p>
+    </header>
+
+    <!-- ===================== NETWORK ===================== -->
+    <section class="bg-white rounded-xl border-2 border-slate-200 p-5 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
+        <div>
+          <h2 class="text-xl font-semibold">The network</h2>
+          <p class="text-sm text-slate-500">
+            3 inputs → 4 hidden neurons → 2 outputs. Line thickness shows weight magnitude.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-500">Optimizer</span>
+          <div class="flex border-2 border-slate-200 rounded-lg overflow-hidden">
+            <button
+              id="opt-adam"
+              class="opt-btn bug-style px-3 py-1.5 text-sm font-semibold border-r border-slate-200"
+              style="background: white; color: var(--bug);"
+            >Adam + L2</button>
+            <button
+              id="opt-adamw"
+              class="opt-btn fix-style active px-3 py-1.5 text-sm font-semibold"
+            >AdamW</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SVG network -->
+      <div class="bg-slate-50 rounded-lg border border-slate-200 p-3">
+        <svg
+          id="network-svg"
+          viewBox="0 0 820 380"
+          class="w-full"
+          style="max-height: 380px;"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <!-- Layer labels -->
+          <g id="layer-labels" font-size="12" fill="#94a3b8" font-weight="600" text-anchor="middle">
+            <text x="120" y="22">INPUTS</text>
+            <text x="420" y="22">HIDDEN</text>
+            <text x="720" y="22">OUTPUTS</text>
+          </g>
+
+          <!-- Connections (drawn first so they appear behind neurons) -->
+          <g id="connections"></g>
+
+          <!-- Pulses (animated dots) -->
+          <g id="pulses"></g>
+
+          <!-- Neurons -->
+          <g id="neurons"></g>
+
+          <!-- Annotation for overfit connection -->
+          <g id="overfit-annotation"></g>
+        </svg>
+      </div>
+
+      <!-- Phase indicator + controls row -->
+      <div class="flex flex-wrap items-center gap-3 mt-4">
+        <div class="flex items-center gap-2 mr-auto flex-wrap">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-500 mr-1">Phase:</span>
+          <span id="phase-forward" class="phase-pill px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+            1. Forward pass
+          </span>
+          <span id="phase-loss" class="phase-pill px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+            2. Compute loss
+          </span>
+          <span id="phase-backward" class="phase-pill px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+            3. Backward pass
+          </span>
+          <span id="phase-update" class="phase-pill px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+            4. Update weights ← AdamW lives here
+          </span>
+        </div>
+      </div>
+
+      <!-- Controls row -->
+      <div class="flex flex-wrap items-center gap-3 mt-3">
+        <button id="btn-step" class="btn-primary px-4 py-2 rounded-lg font-semibold text-sm">
+          ▶ Train one step
+        </button>
+        <button id="btn-play" class="btn-secondary px-4 py-2 rounded-lg font-semibold text-sm">
+          ▶▶ Auto-train (fast)
+        </button>
+        <button id="btn-reset" class="btn-secondary px-4 py-2 rounded-lg font-semibold text-sm">
+          ↺ Reset
+        </button>
+        <div class="ml-auto flex items-center gap-4 text-sm">
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-slate-500">Steps:</span>
+            <span class="mono font-bold text-lg ml-1" id="step-counter">0</span>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-wider font-semibold text-slate-500">Overfit weight:</span>
+            <span class="mono font-bold text-lg ml-1" id="overfit-value">5.000</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== CHART ===================== -->
+    <section class="bg-white rounded-xl border-2 border-slate-200 p-5">
+      <div class="flex items-baseline justify-between mb-2">
+        <div>
+          <h2 class="text-xl font-semibold">The overfit weight over time</h2>
+          <p class="text-sm text-slate-500">
+            Both optimizers run in parallel. Watch the orange weight's magnitude under each one.
+          </p>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="inline-block w-4 h-1 rounded" style="background: var(--bug);"></span>
+            <span class="font-semibold" style="color: var(--bug)">Adam + L2</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-block w-4 h-1 rounded" style="background: var(--fix);"></span>
+            <span class="font-semibold" style="color: var(--fix)">AdamW</span>
+          </div>
+        </div>
+      </div>
+      <div style="height: 240px;">
+        <canvas id="weight-chart"></canvas>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-400 mt-4">
+      Tip · After ~50 steps the gap becomes obvious. Toggle the optimizer above to see the network state under each.
+    </footer>
+  </main>
+
+  <script>
+    // ============================================================
+    // NETWORK SPEC
+    // ============================================================
+    const LAYERS = [3, 4, 2]; // input, hidden, output
+    const LAYER_NAMES = ["input", "hidden", "output"];
+    const POSITIONS = {
+      input:  { x: 120, ys: [100, 200, 300] },
+      hidden: { x: 420, ys: [80, 175, 265, 350] },
+      output: { x: 720, ys: [160, 270] },
+    };
+    const NEURON_R = 22;
+
+    // The "overfit" connection — the one we're highlighting
+    // (from input neuron 1 → hidden neuron 2)
+    const OVERFIT = { fromLayer: 0, fromIdx: 1, toLayer: 1, toIdx: 2 };
+
+    // Optimizer hyperparameters (tuned for visible per-step change)
+    // springStrength: how strongly the simulated gradient pulls each weight toward
+    //   its "natural value" — represents what the data wants this connection to be.
+    // noiseScale: per-step gradient noise — represents the stochasticity of real training.
+    const HP = {
+      lr: 0.05,
+      lambda: 0.1,
+      springStrength: 0.2,
+      noiseScale: 0.2,
+      epsilon: 1e-8,
+    };
+
+    // Box-Muller Gaussian sampler — used for the per-step gradient noise.
+    function randomNormal(mean, std) {
+      let u1 = Math.random();
+      while (u1 === 0) u1 = Math.random();
+      const u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      return mean + std * z;
+    }
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    let state;
+
+    function initState() {
+      // Initialize weights. Most are small. One is large (the overfit one).
+      // Each weight has:
+      //   - target:  the "natural value" — what the data is pushing this weight toward
+      //   - v̂:      gradient history (low for normal weights, high for the overfit one)
+      // The simulated gradient each step is: springStrength * (w − target) + noise.
+      // This is what makes weights settle near their targets instead of collapsing to 0.
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const sign = () => (Math.random() < 0.5 ? -1 : 1);
+
+      function buildLayer(inSize, outSize) {
+        const w = [];
+        const target = [];
+        const v = [];
+        for (let i = 0; i < inSize; i++) {
+          w.push([]);
+          target.push([]);
+          v.push([]);
+          for (let j = 0; j < outSize; j++) {
+            const val = sign() * rand(0.2, 0.6);
+            w[i].push(val);
+            target[i].push(val);   // natural target = initial weight
+            v[i].push(1.0);         // normal gradient history
+          }
+        }
+        return { w, target, v };
+      }
+
+      const layer0 = buildLayer(LAYERS[0], LAYERS[1]);
+      const layer1 = buildLayer(LAYERS[1], LAYERS[2]);
+
+      // Override the overfit connection — the "data quirk":
+      //   - initial weight: 5.0 (way bigger than the others)
+      //   - target: 5.0 (the data quirk keeps pumping it up)
+      //   - v̂: 100 → √v̂ = 10 (lots of gradient history, so Adam's adaptive denominator
+      //     dampens both the gradient AND the L2 regularization on this weight)
+      layer0.w[OVERFIT.fromIdx][OVERFIT.toIdx] = 5.0;
+      layer0.target[OVERFIT.fromIdx][OVERFIT.toIdx] = 5.0;
+      layer0.v[OVERFIT.fromIdx][OVERFIT.toIdx] = 100.0;
+
+      // adam and adamw each get an independent copy of the weights so their
+      // trajectories can diverge. Targets and v̂ are shared (same underlying network).
+      const cloneLayer = (layer) => ({ w: layer.w.map((row) => [...row]) });
+      const adam = { layers: [cloneLayer(layer0), cloneLayer(layer1)] };
+      const adamw = { layers: [cloneLayer(layer0), cloneLayer(layer1)] };
+
+      state = {
+        adam,
+        adamw,
+        targets: [layer0.target, layer1.target],   // shared by both methods
+        vHats: [layer0.v, layer1.v],                // shared by both methods
+        step: 0,
+        phase: "idle", // 'idle', 'forward', 'loss', 'backward', 'update'
+        currentView: "adamw",
+        isPlaying: false,
+        playInterval: null,
+        // Trajectory of the overfit weight under each method
+        trajectory: {
+          adam: [{ x: 0, y: 5.0 }],
+          adamw: [{ x: 0, y: 5.0 }],
+        },
+        // Animation lock so we can't fire while animating
+        animating: false,
+      };
+    }
+
+    // ============================================================
+    // GEOMETRY HELPERS
+    // ============================================================
+    function getNeuronPos(layerIdx, neuronIdx) {
+      const lp = POSITIONS[LAYER_NAMES[layerIdx]];
+      return { x: lp.x, y: lp.ys[neuronIdx] };
+    }
+
+    // Compute connection line endpoints (offset from neuron edges)
+    function getConnectionPath(layerIdx, fromIdx, toIdx) {
+      const a = getNeuronPos(layerIdx, fromIdx);
+      const b = getNeuronPos(layerIdx + 1, toIdx);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const ux = dx / len;
+      const uy = dy / len;
+      return {
+        x1: a.x + ux * NEURON_R,
+        y1: a.y + uy * NEURON_R,
+        x2: b.x - ux * NEURON_R,
+        y2: b.y - uy * NEURON_R,
+      };
+    }
+
+    // Stroke width scaling for weight magnitude (clamped for sanity)
+    function strokeWidthFor(w) {
+      const mag = Math.abs(w);
+      return Math.min(Math.max(mag * 1.5, 0.6), 14);
+    }
+
+    function strokeColorFor(w, isOverfit) {
+      if (isOverfit) return "#f97316"; // orange
+      return w >= 0 ? "#3b82f6" : "#ef4444"; // blue positive, red negative
+    }
+
+    // ============================================================
+    // RENDERING
+    // ============================================================
+    function renderNetwork() {
+      const conns = document.getElementById("connections");
+      const neurons = document.getElementById("neurons");
+      const annot = document.getElementById("overfit-annotation");
+      conns.innerHTML = "";
+      neurons.innerHTML = "";
+      annot.innerHTML = "";
+
+      const current = state.currentView === "adam" ? state.adam : state.adamw;
+
+      // Draw connections
+      for (let l = 0; l < LAYERS.length - 1; l++) {
+        const layer = current.layers[l];
+        for (let i = 0; i < LAYERS[l]; i++) {
+          for (let j = 0; j < LAYERS[l + 1]; j++) {
+            const path = getConnectionPath(l, i, j);
+            const w = layer.w[i][j];
+            const isOverfit =
+              l === OVERFIT.fromLayer &&
+              i === OVERFIT.fromIdx &&
+              j === OVERFIT.toIdx;
+            const line = document.createElementNS(
+              "http://www.w3.org/2000/svg",
+              "line"
+            );
+            line.setAttribute("x1", path.x1);
+            line.setAttribute("y1", path.y1);
+            line.setAttribute("x2", path.x2);
+            line.setAttribute("y2", path.y2);
+            line.setAttribute("stroke", strokeColorFor(w, isOverfit));
+            line.setAttribute("stroke-width", strokeWidthFor(w));
+            line.setAttribute("class", "connection" + (isOverfit ? " overfit" : ""));
+            line.setAttribute("data-from-layer", l);
+            line.setAttribute("data-from-idx", i);
+            line.setAttribute("data-to-idx", j);
+            line.setAttribute("data-overfit", isOverfit ? "1" : "0");
+            conns.appendChild(line);
+          }
+        }
+      }
+
+      // Draw neurons
+      for (let l = 0; l < LAYERS.length; l++) {
+        for (let i = 0; i < LAYERS[l]; i++) {
+          const pos = getNeuronPos(l, i);
+          const circle = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "circle"
+          );
+          circle.setAttribute("cx", pos.x);
+          circle.setAttribute("cy", pos.y);
+          circle.setAttribute("r", NEURON_R);
+          circle.setAttribute("fill", "white");
+          circle.setAttribute("stroke", "#1e293b");
+          circle.setAttribute("stroke-width", "2");
+          circle.setAttribute(
+            "class",
+            `neuron neuron-layer-${l} neuron-${l}-${i}`
+          );
+          neurons.appendChild(circle);
+        }
+      }
+
+      // Annotate the overfit connection
+      const a = getNeuronPos(OVERFIT.fromLayer, OVERFIT.fromIdx);
+      const b = getNeuronPos(OVERFIT.toLayer, OVERFIT.toIdx);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2 - 18;
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", mx);
+      label.setAttribute("y", my);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("font-size", "11");
+      label.setAttribute("font-weight", "700");
+      label.setAttribute("fill", "#f97316");
+      const ow = current.layers[OVERFIT.fromLayer].w[OVERFIT.fromIdx][OVERFIT.toIdx];
+      label.textContent = `overfit weight: ${ow.toFixed(2)}`;
+      annot.appendChild(label);
+
+      // Update overfit display
+      document.getElementById("overfit-value").textContent = Math.abs(ow).toFixed(3);
+    }
+
+    function renderChart() {
+      weightChart.data.datasets[0].data = state.trajectory.adam;
+      weightChart.data.datasets[1].data = state.trajectory.adamw;
+      weightChart.update("none");
+    }
+
+    function renderStepCounter() {
+      document.getElementById("step-counter").textContent = state.step;
+    }
+
+    function highlightPhase(phaseName) {
+      const phases = ["forward", "loss", "backward", "update"];
+      phases.forEach((p) => {
+        const el = document.getElementById(`phase-${p}`);
+        el.classList.remove("bg-blue-100", "text-blue-700", "bg-amber-100", "text-amber-700", "bg-orange-100", "text-orange-700", "bg-emerald-100", "text-emerald-700");
+        el.classList.add("bg-slate-100", "text-slate-500");
+      });
+      if (phaseName === "forward") {
+        const el = document.getElementById("phase-forward");
+        el.classList.remove("bg-slate-100", "text-slate-500");
+        el.classList.add("bg-blue-100", "text-blue-700");
+      } else if (phaseName === "loss") {
+        const el = document.getElementById("phase-loss");
+        el.classList.remove("bg-slate-100", "text-slate-500");
+        el.classList.add("bg-amber-100", "text-amber-700");
+      } else if (phaseName === "backward") {
+        const el = document.getElementById("phase-backward");
+        el.classList.remove("bg-slate-100", "text-slate-500");
+        el.classList.add("bg-orange-100", "text-orange-700");
+      } else if (phaseName === "update") {
+        const el = document.getElementById("phase-update");
+        el.classList.remove("bg-slate-100", "text-slate-500");
+        el.classList.add("bg-emerald-100", "text-emerald-700");
+      }
+    }
+
+    // ============================================================
+    // ANIMATIONS — forward/backward pulses
+    // ============================================================
+    function animatePulses(direction, durationMs) {
+      // Animate a glowing dot along each connection in the chosen direction
+      const conns = document.querySelectorAll("#connections line");
+      const pulses = document.getElementById("pulses");
+      pulses.innerHTML = "";
+
+      conns.forEach((line) => {
+        const x1 = parseFloat(line.getAttribute("x1"));
+        const y1 = parseFloat(line.getAttribute("y1"));
+        const x2 = parseFloat(line.getAttribute("x2"));
+        const y2 = parseFloat(line.getAttribute("y2"));
+        const dot = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "circle"
+        );
+        dot.setAttribute("r", 5);
+        dot.setAttribute(
+          "fill",
+          direction === "forward" ? "#3b82f6" : "#f97316"
+        );
+        dot.setAttribute(
+          "style",
+          `offset-path: path('M ${x1} ${y1} L ${x2} ${y2}'); offset-rotate: 0deg;`
+        );
+        dot.classList.add("pulse");
+        dot.classList.add(direction === "forward" ? "active" : "backward");
+        pulses.appendChild(dot);
+      });
+
+      return new Promise((resolve) => setTimeout(resolve, durationMs));
+    }
+
+    function flashUpdate() {
+      // Briefly flash the connections to indicate the update step
+      const conns = document.querySelectorAll("#connections line");
+      conns.forEach((line) => {
+        const orig = line.getAttribute("stroke");
+        line.setAttribute("stroke", "#10b981");
+        setTimeout(() => line.setAttribute("stroke", orig), 250);
+      });
+      return new Promise((resolve) => setTimeout(resolve, 350));
+    }
+
+    function flashLoss() {
+      // Flash output neurons amber
+      const outputNeurons = document.querySelectorAll(".neuron-layer-2");
+      outputNeurons.forEach((n) => {
+        n.setAttribute("fill", "#fef3c7");
+        n.setAttribute("stroke", "#f59e0b");
+      });
+      return new Promise((resolve) => setTimeout(() => {
+        outputNeurons.forEach((n) => {
+          n.setAttribute("fill", "white");
+          n.setAttribute("stroke", "#1e293b");
+        });
+        resolve();
+      }, 400));
+    }
+
+    // ============================================================
+    // WEIGHT UPDATE (the heart of the demo)
+    // ============================================================
+    function applyUpdate() {
+      // Each step, for each weight:
+      //   1. Simulate a "task gradient" that pulls the weight toward its natural target
+      //      plus random noise (this is what real backprop produces in real training).
+      //   2. Apply the optimizer's update rule:
+      //
+      //   Adam + L2:  L2 (λw) is added to the gradient, then everything is divided by √v̂.
+      //               update = lr · (task_grad + λw) / √v̂
+      //               → on the overfit weight, √v̂ is huge, so BOTH the gradient AND the
+      //                 regularization get dampened. Decay can barely shrink it.
+      //
+      //   AdamW:      Gradient is divided by √v̂ as usual, but weight decay is applied
+      //               SEPARATELY (decoupled).
+      //               update = lr · task_grad / √v̂  +  lr · λ · w
+      //               → the regularization on the overfit weight is at FULL STRENGTH,
+      //                 even though the gradient itself is dampened by √v̂.
+      //
+      // Both methods see the same noise per weight so the comparison is apples-to-apples.
+
+      const { lr, lambda, springStrength, noiseScale, epsilon } = HP;
+
+      for (let l = 0; l < state.adam.layers.length; l++) {
+        const adamLayer = state.adam.layers[l];
+        const adamwLayer = state.adamw.layers[l];
+        const targetLayer = state.targets[l];
+        const vHatLayer = state.vHats[l];
+
+        for (let i = 0; i < adamLayer.w.length; i++) {
+          for (let j = 0; j < adamLayer.w[i].length; j++) {
+            const target = targetLayer[i][j];
+            const vHat = vHatLayer[i][j];
+            const sqrtV = Math.sqrt(vHat) + epsilon;
+            const noise = randomNormal(0, noiseScale);
+
+            // ===== Adam + L2 =====
+            const wA = adamLayer.w[i][j];
+            const gradA = springStrength * (wA - target) + noise;
+            const updateA = (lr * (gradA + lambda * wA)) / sqrtV;
+            adamLayer.w[i][j] = wA - updateA;
+
+            // ===== AdamW =====
+            const wW = adamwLayer.w[i][j];
+            const gradW = springStrength * (wW - target) + noise; // same noise
+            const updateGradW = (lr * gradW) / sqrtV;
+            const updateDecayW = lr * lambda * wW;
+            adamwLayer.w[i][j] = wW - updateGradW - updateDecayW;
+          }
+        }
+      }
+
+      state.step += 1;
+      // Record overfit weight trajectory
+      const adamOw =
+        state.adam.layers[OVERFIT.fromLayer].w[OVERFIT.fromIdx][OVERFIT.toIdx];
+      const adamwOw =
+        state.adamw.layers[OVERFIT.fromLayer].w[OVERFIT.fromIdx][OVERFIT.toIdx];
+      state.trajectory.adam.push({ x: state.step, y: Math.abs(adamOw) });
+      state.trajectory.adamw.push({ x: state.step, y: Math.abs(adamwOw) });
+    }
+
+    // ============================================================
+    // ONE FULL TRAINING STEP (forward → loss → backward → update)
+    // ============================================================
+    async function trainOneStep() {
+      if (state.animating) return;
+      state.animating = true;
+
+      // Phase 1: forward
+      highlightPhase("forward");
+      await animatePulses("forward", 900);
+
+      // Phase 2: loss
+      highlightPhase("loss");
+      await flashLoss();
+
+      // Phase 3: backward
+      highlightPhase("backward");
+      await animatePulses("backward", 900);
+
+      // Phase 4: update — this is where AdamW lives
+      highlightPhase("update");
+      applyUpdate();
+      renderNetwork();
+      renderChart();
+      renderStepCounter();
+      await flashUpdate();
+
+      // Reset phase
+      highlightPhase("idle");
+      state.animating = false;
+    }
+
+    // ============================================================
+    // FAST AUTO-TRAIN (no animations, just rapid updates)
+    // ============================================================
+    function fastTick() {
+      // Run multiple updates per tick for speed, then re-render
+      for (let i = 0; i < 5; i++) {
+        applyUpdate();
+      }
+      renderNetwork();
+      renderChart();
+      renderStepCounter();
+    }
+
+    function startPlay() {
+      if (state.isPlaying) return;
+      state.isPlaying = true;
+      document.getElementById("btn-play").textContent = "⏸ Pause";
+      state.playInterval = setInterval(fastTick, 80);
+    }
+    function stopPlay() {
+      if (!state.isPlaying) return;
+      state.isPlaying = false;
+      document.getElementById("btn-play").textContent = "▶▶ Auto-train (fast)";
+      clearInterval(state.playInterval);
+      state.playInterval = null;
+    }
+    function togglePlay() {
+      if (state.isPlaying) stopPlay();
+      else startPlay();
+    }
+
+    // ============================================================
+    // OPTIMIZER TOGGLE
+    // ============================================================
+    function setOptimizerView(which) {
+      state.currentView = which;
+      document.getElementById("opt-adam").classList.toggle("active", which === "adam");
+      document.getElementById("opt-adamw").classList.toggle("active", which === "adamw");
+      renderNetwork();
+    }
+
+    // ============================================================
+    // RESET
+    // ============================================================
+    function reset() {
+      stopPlay();
+      initState();
+      renderNetwork();
+      renderStepCounter();
+      // Reset chart datasets
+      weightChart.data.datasets[0].data = state.trajectory.adam;
+      weightChart.data.datasets[1].data = state.trajectory.adamw;
+      weightChart.update("none");
+      highlightPhase("idle");
+    }
+
+    // ============================================================
+    // CHART
+    // ============================================================
+    let weightChart;
+    function initChart() {
+      const ctx = document.getElementById("weight-chart").getContext("2d");
+      weightChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: "Adam + L2",
+              data: [{ x: 0, y: 5.0 }],
+              borderColor: "#dc2626",
+              backgroundColor: "rgba(220, 38, 38, 0.08)",
+              borderWidth: 3,
+              pointRadius: 0,
+              tension: 0.1,
+              fill: false,
+            },
+            {
+              label: "AdamW",
+              data: [{ x: 0, y: 5.0 }],
+              borderColor: "#059669",
+              backgroundColor: "rgba(5, 150, 105, 0.08)",
+              borderWidth: 3,
+              pointRadius: 0,
+              tension: 0.1,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          parsing: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) =>
+                  `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: "linear",
+              title: { display: true, text: "Training step" },
+              grid: { color: "#f1f5f9" },
+            },
+            y: {
+              title: { display: true, text: "|overfit weight|" },
+              suggestedMin: 0,
+              suggestedMax: 5.5,
+              grid: { color: "#f1f5f9" },
+            },
+          },
+        },
+      });
+    }
+
+    // ============================================================
+    // BOOT
+    // ============================================================
+    document.addEventListener("DOMContentLoaded", () => {
+      initState();
+      initChart();
+      renderNetwork();
+      renderStepCounter();
+      highlightPhase("idle");
+
+      document.getElementById("btn-step").addEventListener("click", trainOneStep);
+      document.getElementById("btn-play").addEventListener("click", togglePlay);
+      document.getElementById("btn-reset").addEventListener("click", reset);
+      document.getElementById("opt-adam").addEventListener("click", () => setOptimizerView("adam"));
+      document.getElementById("opt-adamw").addEventListener("click", () => setOptimizerView("adamw"));
+    });
+  </script>
+</body>
+</html>
