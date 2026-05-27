@@ -10,11 +10,11 @@
 
 ## Dataset details
 
-- **Source:** PlantVillage — 54,306 RGB leaf images.
-- **Classes:** 38 total. Each class encodes a (crop, condition) pair; "healthy" variants exist for each of the 14 crops.
-- **Layout (on disk):** `torchvision.datasets.ImageFolder` format — `data/raw/PlantVillage/<class_name>/<image>.jpg`.
+- **Source:** PlantVillage — 54,306 RGB leaf images, plus a separate **non-plant background folder** for the negative class.
+- **Classes:** **39 total.** 38 PlantVillage classes (each encoding a `(crop, condition)` pair, with "healthy" variants for each of the 14 crops), plus 1 **`No_plant_detected`** negative class. The negative class is trained from a folder of random non-plant photos (vehicles, indoor scenes, etc.) so the model can reject obviously non-leaf input instead of confidently misclassifying it.
+- **Layout (on disk):** `torchvision.datasets.ImageFolder` format — `data/raw/PlantVillage/<class_name>/<image>.jpg`. The non-plant folder lives at the same level as the disease folders (e.g., `data/raw/PlantVillage/No_plant_detected/<image>.jpg`).
 - **Class index assignment:** `ImageFolder` sorts class folder names **alphabetically** and assigns indices in that order. This ordering must be captured as an artifact (`artifacts/checkpoints/class_names.json`) at training time and reloaded at inference time. **Never re-derive class names at inference by scanning the filesystem.**
-- **Class naming convention:** PlantVillage folder names look like `Tomato___Late_blight` or `Apple___healthy` — crop and condition separated by triple underscores. Preserve them as-is.
+- **Class naming convention:** PlantVillage folder names look like `Tomato___Late_blight` or `Apple___healthy` — crop and condition separated by triple underscores. Preserve them as-is. The negative class uses a simple `No_plant_detected` name (placeholder — finalize once dataset is provided).
 
 ## Critical constants
 
@@ -29,7 +29,7 @@ IMAGENET_STD  = [0.229, 0.224, 0.225]
 IMG_SIZE = 224                # EfficientNet-B0 default input
 
 # Output
-NUM_CLASSES = 38              # PlantVillage class count
+NUM_CLASSES = 39              # 38 PlantVillage classes + 1 No_plant_detected (negative) class
 
 # Backbone
 FEATURE_DIM = 1280   # output of EfficientNet-B0 `features` block (consumed by the classifier head)

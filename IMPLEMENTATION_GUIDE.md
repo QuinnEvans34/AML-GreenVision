@@ -20,9 +20,31 @@
 
 ---
 
+## Rubric cross-reference — the 7 outline questions → our 8 decisions
+
+The course outline asks 7 specific design questions. This guide answers all of them and adds three additional decisions (optimizer, training loop, MLflow) that aren't enumerated by the outline but inform the W9–10 implementation. Quick map for the grader:
+
+| # | Outline question | Answered in |
+|---|---|---|
+| 1 | Why EfficientNet-B0? Fine-tuning strategy (freeze what, train what, for how many epochs)? | Decisions **1** + **2** |
+| 2 | Data pipeline: train/val split ratio and strategy. Augmentation list with justification for each. | Decision **3** |
+| 3 | Serving: how will you load the model in FastAPI? How will you handle class names? | Decisions **8** + **4** |
+| 4 | Normalization: what values, applied where (training, val, inference)? | Decision **4** |
+| 5 | Class name persistence: how do you ensure model's output index → correct disease name? | Decision **4** |
+| 6 | Low-confidence predictions: what does the API return when confidence < 50%? What does the dashboard show? | Decision **8** (`warnings` + dashboard sub-decision) |
+| 7 | Error handling: what happens on a non-leaf image? A corrupted file? | Decision **8** (non-leaf via 39th class; corrupted via HTTP 400) |
+
+**Additional design content** (not on the rubric, but locked):
+
+- **Decision 5** — Optimizer (AdamW), learning rates, scheduler, regularization
+- **Decision 6** — Training loop (batch size, epochs, early stopping, overfitting detection)
+- **Decision 7** — Experiment tracking with MLflow (nested runs, artifacts, end-of-training reports)
+
+---
+
 ## 1. Project summary
 
-**What it is.** GreenVision classifies an uploaded leaf image into one of **38** PlantVillage classes (disease state × crop, plus healthy classes) across **14** crops, using **EfficientNet-B0** pre-trained on ImageNet and fine-tuned on **54,306** PlantVillage images.
+**What it is.** GreenVision classifies an uploaded leaf image into one of **39** classes: **38 PlantVillage classes** (disease state × crop, plus healthy classes) across **14** crops, plus a **39th `No_plant_detected` negative class** for non-leaf input rejection. Built on **EfficientNet-B0** pre-trained on ImageNet and fine-tuned on **54,306** PlantVillage images + a background folder of non-plant photos.
 
 **Who uses it.** Growers, agronomists, and ag-tech apps that need a quick triage signal — "what's likely wrong with this leaf" — before reaching for a more expensive diagnostic.
 
@@ -44,8 +66,8 @@
 **Working choice.** ✅ Locked.
 
 - Keep EfficientNet-B0's feature extractor (ImageNet-pretrained).
-- Replace the final classifier with a head that maps the **1280-dim** feature vector to **38** class logits.
-- Locked structure: `Dropout(p=0.3) → Linear(1280, 38)`.
+- Replace the final classifier with a head that maps the **1280-dim** feature vector to **39** class logits (38 PlantVillage classes + 1 `No_plant_detected` negative class).
+- Locked structure: `Dropout(p=0.3) → Linear(1280, 39)`.
 
 **Reasoning.** EfficientNet-B0 is the right base model for GreenVision for three reasons.
 
@@ -53,9 +75,9 @@ First, **learnable downsampling via strided convolutions.** EfficientNet downsam
 
 Second, **strong, transferable pretrained features.** Trained on ImageNet (1.2M images, 1000 classes). Early-layer filters are battle-tested edge/texture detectors that transfer cleanly to leaf images. The 1280-dim feature vector at the head encodes high-level visual content in a way that linear classification can effectively consume.
 
-Third, **good accuracy/compute trade-off for our scale.** EfficientNet-B0 is the smallest of the EfficientNet family (~5.3M parameters), which keeps iteration fast during development and deployment lightweight. A larger variant (B1–B7) could yield a small accuracy bump at significant compute cost — premature optimization for a 38-class problem with 54K training images.
+Third, **good accuracy/compute trade-off for our scale.** EfficientNet-B0 is the smallest of the EfficientNet family (~5.3M parameters), which keeps iteration fast during development and deployment lightweight. A larger variant (B1–B7) could yield a small accuracy bump at significant compute cost — premature optimization for a 39-class problem with 54K+ training images.
 
-For the **head**, keeping it minimal (`Dropout → Linear(1280, 38)`) is the right starting point. The 1280-dim feature space is already well-organized by the pretrained backbone, so a single linear projection is usually sufficient. A hidden layer between pooled features and class logits adds parameters and risks overfitting without obvious benefit; I'll leave that as an explicit "test during implementation" item rather than committing now.
+For the **head**, keeping it minimal (`Dropout → Linear(1280, 39)`) is the right starting point. The 1280-dim feature space is already well-organized by the pretrained backbone, so a single linear projection is usually sufficient. A hidden layer between pooled features and class logits adds parameters and risks overfitting without obvious benefit; I'll leave that as an explicit "test during implementation" item rather than committing now.
 
 **Where it shows up in code.**
 
@@ -64,11 +86,11 @@ For the **head**, keeping it minimal (`Dropout → Linear(1280, 38)`) is the rig
 import torch.nn as nn
 from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
-NUM_CLASSES = 38
+NUM_CLASSES = 39   # 38 PlantVillage classes + 1 No_plant_detected (negative) class
 FEATURE_DIM = 1280  # EfficientNet-B0 output of features
 
 def build_model(num_classes: int = NUM_CLASSES, dropout: float = 0.3) -> nn.Module:
-    """EfficientNet-B0 with a new classification head sized for PlantVillage."""
+    """EfficientNet-B0 with a new classification head sized for PlantVillage + No_plant_detected."""
     weights = EfficientNet_B0_Weights.IMAGENET1K_V1
     model = efficientnet_b0(weights=weights)
     model.classifier = nn.Sequential(
@@ -78,7 +100,7 @@ def build_model(num_classes: int = NUM_CLASSES, dropout: float = 0.3) -> nn.Modu
     return model
 ```
 
-**Uncertain about.** Nothing — locked. May revisit the hidden-layer variant (`1280 → 512 → 38`) as a follow-up experiment if Phase 2 plateaus and we want to test additional head capacity. Initial dropout rate of 0.3 is slightly above EfficientNet's default of 0.2 — adjustable if MLflow shows under/over-regularization.
+**Uncertain about.** Nothing — locked. May revisit the hidden-layer variant (`1280 → 512 → 39`) as a follow-up experiment if Phase 2 plateaus and we want to test additional head capacity. Initial dropout rate of 0.3 is slightly above EfficientNet's default of 0.2 — adjustable if MLflow shows under/over-regularization. Final folder name for the `No_plant_detected` class is a placeholder until the dataset is provided.
 
 ---
 
@@ -207,6 +229,8 @@ def from_idx_for(epoch: int) -> int:
 
 **Uniform sampling, not weighted.** Weighted sampling forces rare-class images to be seen multiple times per epoch, which can backfire when those classes have few representative images — the model memorizes the same handful of pictures instead of learning generalizable features. With strong augmentation and dropout, class imbalance often resolves on its own. We start with uniform sampling and monitor per-class precision/recall in MLflow after Phase 2. If rare classes underperform (e.g., recall < 0.7 on classes with <500 images), the mitigation is to switch to `WeightedRandomSampler` *or* class-weighted cross-entropy loss for the next run — but not preemptively.
 
+**The 39th class — `No_plant_detected` (negative class).** Alongside the 38 PlantVillage disease classes, the training set includes a folder of non-plant photos (vehicles, indoor scenes, random subjects). This "negative class" teaches the model to *reject* obviously non-leaf inputs at inference instead of confidently classifying a car photo as a tomato disease. It's trained the same way as the other 38 classes — same `train_tfms`, same uniform sampling, same `CrossEntropyLoss` — and the API surfaces a specific warning when this class wins (see Decision 8). Folder name `No_plant_detected` is a placeholder; the real folder name is finalized once the dataset is provided, which only affects ImageFolder's alphabetical class-index position.
+
 **Where it shows up in code.**
 
 ```python
@@ -273,7 +297,7 @@ def stratified_split(dataset, val_frac: float = 0.1, test_frac: float = 0.1,
 
 ## Decision 4 — Normalization & class index handling
 
-**What I'm deciding.** Which normalization stats to use, how the 38 class names are pinned to indices, and how to keep train and inference in sync.
+**What I'm deciding.** Which normalization stats to use, how the 39 class names are pinned to indices, and how to keep train and inference in sync.
 
 **Working choice.** ✅ Locked.
 
@@ -302,7 +326,7 @@ import json
 from pathlib import Path
 
 CLASS_NAMES_PATH = Path("artifacts/checkpoints/class_names.json")
-NUM_CLASSES = 38
+NUM_CLASSES = 39   # 38 PlantVillage classes + 1 No_plant_detected (negative) class
 
 def save_class_names(classes: list[str]) -> None:
     """Persist the alphabetical class list to the canonical path.
@@ -609,7 +633,7 @@ def set_seed(seed: int = 42) -> None:
 - **Checkpoint logging**: `mlflow.log_artifact("artifacts/checkpoints/best.pt")` attached to the `phase2` child. The FastAPI handler loads from the canonical path; the MLflow copy is the audit trail.
 - **End-of-training artifacts**:
   - **Training curves PNG** (`train/val loss` and `train/val accuracy` over epochs) — logged to the `phase2` child run.
-  - **Confusion matrix PNG** (38×38 heatmap on the test set) — logged to the **parent** run.
+  - **Confusion matrix PNG** (39×39 heatmap on the test set) — logged to the **parent** run.
   - **Per-class precision/recall/F1 report** (sklearn's `classification_report`, written to a `.txt`) — logged to the **parent** run.
 
 **Reasoning.**
@@ -724,7 +748,7 @@ def train(attempt_id: str, ...):
 - `POST /predict` — **multipart/form-data**, field `file`. Primary upload path.
 - `POST /predict_b64` — **JSON body** with `image_b64` (base64-encoded image). Secondary path for browser/mobile clients.
 - `GET /health` — liveness probe. Reports whether the model is loaded.
-- `GET /classes` — returns the 38 class names in model-output order.
+- `GET /classes` — returns the 39 class names in model-output order.
 - `GET /docs` — FastAPI auto-generates Swagger UI from the Pydantic schemas. Free.
 
 **Response shape** (Pydantic-validated, identical for both prediction endpoints):
@@ -762,6 +786,16 @@ def train(attempt_id: str, ...):
 | `422` | Pydantic schema violation (FastAPI automatic) |
 | `500` | Unexpected server error — logged, no stack trace leaked |
 | `503` | Model not yet loaded (brief startup window) |
+
+**Behavior on non-leaf / low-confidence input** (the two scenarios the rubric explicitly asks about):
+
+| Scenario | What the API returns | What the dashboard renders *(future weeks)* |
+|---|---|---|
+| **Non-leaf image** (random photo of a car, indoors, etc.) | Model classifies as `No_plant_detected` (the 39th negative class) → HTTP 200, `label: "No_plant_detected"`, normal confidence, `top_k` still surfaces alternatives, `warnings: ["No plant detected — please upload a photo of a leaf"]` | Renders a clear "No plant detected" message, hides the class name, shows the upload prompt and a "Retake photo" CTA. `top_k` is not shown because the prediction isn't useful. |
+| **Low confidence** (top-1 probability < 0.5 on any class) | HTTP 200 with the predicted label, `top_k` array of alternatives, `warnings: ["Model is uncertain (X%) — please retake or seek expert opinion"]` | Predicted label is rendered in a **muted/grayed** style instead of normal emphasis. The confidence percentage is shown prominently with an explicit warning chip. The `top_k` alternatives are surfaced side-by-side so the user can review them. "Retake photo" becomes the primary CTA; "Use this prediction" is secondary. |
+| **Corrupted file** (PIL can't decode) | HTTP 400 with `"Could not decode image"` — no model inference happens | Inline error banner: "We couldn't read that image — try a different file." |
+
+The distinction matters: **non-leaf is a valid prediction result** (the model says "this isn't a leaf"); **corrupted file is a protocol error** (we couldn't even feed it to the model). Different HTTP codes reflect that. Clients that ignore `warnings` still work — the API contract doesn't change based on confidence level.
 
 **Reasoning.**
 

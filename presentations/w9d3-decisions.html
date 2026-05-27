@@ -138,7 +138,7 @@
           {
             heading: "Classifier head (replaces the original 1000-class layer)",
             items: [
-              "<code>Dropout(p=0.3) → Linear(1280, 38)</code>",
+              "<code>Dropout(p=0.3) → Linear(1280, 39)</code> &nbsp;<em>(39 = 38 PlantVillage + 1 No_plant_detected)</em>",
             ],
           },
         ],
@@ -250,7 +250,7 @@
           {
             heading: "Validation at load time",
             items: [
-              "<code>load_class_names()</code> raises if the file is missing or the count ≠ 38",
+              "<code>load_class_names()</code> raises if the file is missing or the count ≠ 39",
             ],
           },
         ],
@@ -402,7 +402,7 @@
               "<code>POST /predict</code> — multipart/form-data <em>(primary)</em>",
               "<code>POST /predict_b64</code> — JSON with base64 image <em>(secondary)</em>",
               "<code>GET /health</code> — liveness + model-loaded status",
-              "<code>GET /classes</code> — returns the 38 class names",
+              "<code>GET /classes</code> — returns the 39 class names",
               "<code>GET /docs</code> — Swagger UI (auto-generated)",
             ],
           },
@@ -484,7 +484,7 @@
               Plant disease classifier — EfficientNet-B0 fine-tuned on PlantVillage
             </p>
             <p class="text-base text-slate-500 mb-10 leading-relaxed">
-              Tracked with MLflow · served with FastAPI · 38 classes · 54,306 images
+              Tracked with MLflow · served with FastAPI · 39 classes (38 PlantVillage + No_plant_detected) · 54,306 images
             </p>
             <div class="border-t border-slate-200 pt-6 max-w-xl">
               <div class="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">

@@ -74,7 +74,7 @@ What do each of these four transfer-learning-mechanics sub-topics actually mean,
   - **Early** (stem + first 2 MBConv stages): Gabor-like edges, color blobs, gradients — universal visual primitives, transfer to any image task.
   - **Middle** (MBConv 3–4): textures, corners, repeating patterns — still pretty general.
   - **Late** (MBConv 5–7 + final 1×1 conv expanding to 1280 channels): high-level features specialized to ImageNet classes (object parts).
-- The final `Linear(1280, 1000)` is ImageNet-specific and is always thrown away in transfer learning; for GreenVision we replace it with `Linear(1280, 38)`.
+- The final `Linear(1280, 1000)` is ImageNet-specific and is always thrown away in transfer learning; for GreenVision we replace it with `Linear(1280, 39)` (38 PlantVillage classes + 1 `No_plant_detected` negative class).
 - Implication for GreenVision: early/mid layers transfer beautifully to leaves; late layers benefit from fine-tuning to adapt away from ImageNet specifics.
 
 #### 1.2 Fine-tuning vs. feature extraction vs. training from scratch
@@ -351,7 +351,7 @@ stage 4 (stride 2):      14 ×  14 × 80
 stage 6 (stride 2):       7 ×   7 × 192
 ```
 
-Spatial dims halve five times (224 → 112 → 56 → 28 → 14 → 7); channel count grows from 3 → 1280; the final 7×7×1280 collapses to 1×1×1280 via **global average pooling**, which is just "downsample all the way to a single value per channel by averaging." That 1280-d vector is what `Linear(1280, 38)` consumes.
+Spatial dims halve five times (224 → 112 → 56 → 28 → 14 → 7); channel count grows from 3 → 1280; the final 7×7×1280 collapses to 1×1×1280 via **global average pooling**, which is just "downsample all the way to a single value per channel by averaging." That 1280-d vector is what `Linear(1280, 39)` consumes.
 
 ##### Why downsampling helps the rest of the network
 
@@ -397,7 +397,7 @@ When the model fine-tunes on PlantVillage, EfficientNet's strided convs *re-lear
 - `padding = (kernel_size − 1) / 2` with `stride = 1` preserves spatial size ("same" padding).
 - Channels: conv freely changes channel count (set by number of filters); pool preserves channel count.
 - General CNN pattern: spatial dims shrink as you go deeper, channels grow. Total tensor volume (H × W × C) trends downward overall.
-- EfficientNet-B0 spatial trajectory: `224 → 112 → 56 → 28 → 14 → 7`, channels `3 → 32 → 16 → 24 → 40 → 80 → 112 → 192 → 320 → 1280`, then GAP to `1280-d`, then `Linear(1280, 38)`.
+- EfficientNet-B0 spatial trajectory: `224 → 112 → 56 → 28 → 14 → 7`, channels `3 → 32 → 16 → 24 → 40 → 80 → 112 → 192 → 320 → 1280`, then GAP to `1280-d`, then `Linear(1280, 39)`.
 
 ### Sources
 
@@ -934,7 +934,7 @@ Overview-only session — no deep dives. Notes captured below directly from the 
       "optimizer_state_dict": optimizer.state_dict(),
       "epoch":                epoch,
       "val_acc":              best_val_acc,
-      "num_classes":          38,
+      "num_classes":          39,
       "arch":                 "efficientnet_b0",
   }, "artifacts/checkpoints/best.pt")
   ```
@@ -989,7 +989,7 @@ Overview-only session — no deep dives. Notes captured below directly from the 
       # ... predict
   ```
 - **For GreenVision:** multipart is primary (`POST /predict`). Add a base64 endpoint later if browser clients need it.
-- Other API concerns: `GET /health` for load-balancer probes; `GET /classes` to expose the 38 class names; HTTP 400 for bad uploads (never leak stack traces); FastAPI's auto-generated `/docs` (Swagger UI) is free.
+- Other API concerns: `GET /health` for load-balancer probes; `GET /classes` to expose the 39 class names; HTTP 400 for bad uploads (never leak stack traces); FastAPI's auto-generated `/docs` (Swagger UI) is free.
 
 ### Sources
 
