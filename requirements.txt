@@ -1,0 +1,28 @@
+# Core deep learning
+torch>=2.2
+torchvision>=0.17
+
+# Experiment tracking
+mlflow>=2.10
+
+# Serving
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pillow>=10.2
+
+# Data / utilities
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.4
+matplotlib>=3.8
+tqdm>=4.66
+pyyaml>=6.0
+
+# Dev / notebooks
+jupyterlab>=4.0
+ipykernel>=6.29
+
+# Testing / quality
+pytest>=8.0
+ruff>=0.4

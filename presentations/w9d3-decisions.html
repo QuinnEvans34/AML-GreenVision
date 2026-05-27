@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GreenVision — Design Decisions (W9D3)</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root {
+      --accent: #2563eb;
+      --ink: #0f172a;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+    }
+    .mono {
+      font-family: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    code {
+      font-family: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, monospace;
+      background: #f1f5f9;
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-size: 0.95em;
+    }
+    .slide-enter {
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .toc-item {
+      border-left: 3px solid transparent;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .toc-item.active {
+      background: #eff6ff;
+      border-left-color: var(--accent);
+    }
+    .toc-item.active .toc-label {
+      color: #0f172a;
+      font-weight: 600;
+    }
+    kbd {
+      font-family: ui-monospace, monospace;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-bottom-width: 2px;
+      border-radius: 0.25rem;
+      padding: 0.125rem 0.375rem;
+      font-size: 0.8em;
+    }
+    .nav-btn {
+      transition: background 0.15s, transform 0.1s;
+    }
+    .nav-btn:active {
+      transform: scale(0.96);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden">
+
+  <div class="flex h-full">
+
+    <!-- =================== SIDEBAR TOC =================== -->
+    <aside class="w-72 bg-white border-r border-slate-200 flex flex-col">
+      <div class="p-5 border-b border-slate-200">
+        <div class="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-1">
+          W9D3 · 8 min + 4 min Q&amp;A
+        </div>
+        <h1 class="text-xl font-bold tracking-tight">GreenVision</h1>
+        <p class="text-sm text-slate-500 mt-0.5">Design decisions outline</p>
+      </div>
+      <nav class="flex-1 overflow-y-auto py-2" id="toc"></nav>
+      <div class="p-4 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
+        <kbd>←</kbd> <kbd>→</kbd> to navigate &nbsp;·&nbsp;
+        <kbd>1</kbd>–<kbd>8</kbd> jump to decision &nbsp;·&nbsp;
+        <kbd>0</kbd> intro &nbsp;·&nbsp;
+        <kbd>9</kbd> open Q
+      </div>
+    </aside>
+
+    <!-- =================== MAIN CONTENT =================== -->
+    <main class="flex-1 overflow-y-auto relative">
+      <div class="max-w-4xl mx-auto p-10 pb-32" id="slide-content"></div>
+
+      <!-- bottom nav -->
+      <div class="fixed bottom-6 right-6 flex items-center gap-3 z-10">
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 px-3 py-2 text-sm text-slate-600 mono">
+          <span id="slide-counter">1 / 10</span>
+        </div>
+        <button id="prev-btn" class="nav-btn px-4 py-2 bg-white border border-slate-300 rounded-lg shadow-sm text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          ← Prev
+        </button>
+        <button id="next-btn" class="nav-btn px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-700">
+          Next →
+        </button>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // =========================================================
+    // SLIDE DATA — sourced verbatim from IMPLEMENTATION_GUIDE.md
+    // =========================================================
+    const slides = [
+      // ---------- Intro / title ----------
+      {
+        type: "title",
+        tocBadge: "·",
+        tocLabel: "Intro",
+      },
+
+      // ---------- Decision 1 ----------
+      {
+        type: "decision",
+        num: 1,
+        category: "Architecture",
+        categoryStyle: { bg: "bg-indigo-100", text: "text-indigo-700" },
+        title: "Model architecture & head design",
+        sections: [
+          {
+            heading: "Base model",
+            items: [
+              "<strong>EfficientNet-B0</strong>, pretrained on ImageNet",
+            ],
+          },
+          {
+            heading: "Classifier head (replaces the original 1000-class layer)",
+            items: [
+              "<code>Dropout(p=0.3) → Linear(1280, 38)</code>",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/models/efficientnet_head.py",
+      },
+
+      // ---------- Decision 2 ----------
+      {
+        type: "decision",
+        num: 2,
+        category: "Training",
+        categoryStyle: { bg: "bg-emerald-100", text: "text-emerald-700" },
+        title: "Transfer learning — two-phase fine-tuning",
+        sections: [
+          {
+            heading: "Phase 1 — head warm-up (3 epochs)",
+            items: [
+              "Freeze the entire backbone (including BatchNorm running stats via <code>.eval()</code>)",
+              "Train the classifier head only at LR <code>1e-3</code>",
+            ],
+          },
+          {
+            heading: "Phase 2 — gradual unfreezing (~12 epochs, 3 stages)",
+            items: [
+              "<strong>Phase 2a</strong> (~4 ep): unfreeze <code>features[6]–features[8]</code> + classifier",
+              "<strong>Phase 2b</strong> (~4 ep): additionally unfreeze <code>features[3]–features[5]</code>",
+              "<strong>Phase 2c</strong> (~4 ep): additionally unfreeze <code>features[0]–features[2]</code> (full unfreeze)",
+            ],
+          },
+          {
+            heading: "Learning rates (Phase 2)",
+            items: [
+              "Head: <code>1e-3</code>, Backbone: <code>1e-4</code> — <strong>10× ratio</strong>",
+            ],
+          },
+          {
+            heading: "BatchNorm handling",
+            items: [
+              "<code>train()</code> mode for unfrozen blocks; <code>eval()</code> mode for frozen blocks",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/training/phases.py",
+      },
+
+      // ---------- Decision 3 ----------
+      {
+        type: "decision",
+        num: 3,
+        category: "Data",
+        categoryStyle: { bg: "bg-amber-100", text: "text-amber-800" },
+        title: "Data pipeline — splits, transforms, augmentation",
+        sections: [
+          {
+            heading: "Loader & split",
+            items: [
+              "<code>torchvision.datasets.ImageFolder</code>",
+              "<strong>Stratified 80/10/10</strong> train/val/test via <code>sklearn.model_selection.train_test_split</code>",
+            ],
+          },
+          {
+            heading: "Train transforms — 5 label-preserving augmentations",
+            items: [
+              "<code>RandomResizedCrop(224, scale=(0.7, 1.0))</code>",
+              "<code>RandomHorizontalFlip()</code>",
+              "<code>RandomVerticalFlip()</code>",
+              "<code>RandomRotation(15)</code>",
+              "<code>ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1)</code>",
+            ],
+          },
+          {
+            heading: "Eval / inference transforms — deterministic",
+            items: [
+              "<code>Resize(256) → CenterCrop(224) → ToTensor → Normalize(ImageNet)</code>",
+            ],
+          },
+          {
+            heading: "Sampling",
+            items: [
+              "Uniform (<code>shuffle=True</code>) — no <code>WeightedRandomSampler</code>",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/data/transforms.py · splits.py",
+      },
+
+      // ---------- Decision 4 ----------
+      {
+        type: "decision",
+        num: 4,
+        category: "Data",
+        categoryStyle: { bg: "bg-amber-100", text: "text-amber-800" },
+        title: "Normalization & class index handling",
+        sections: [
+          {
+            heading: "Normalization stats",
+            items: [
+              "ImageNet: mean <code>[0.485, 0.456, 0.406]</code>, std <code>[0.229, 0.224, 0.225]</code>",
+              "Logged to MLflow as run params",
+            ],
+          },
+          {
+            heading: "class_names.json — saved to BOTH locations",
+            items: [
+              "<strong>Canonical:</strong> <code>artifacts/checkpoints/class_names.json</code> (loaded by the API)",
+              "<strong>MLflow artifact:</strong> attached to the run (audit trail)",
+            ],
+          },
+          {
+            heading: "Validation at load time",
+            items: [
+              "<code>load_class_names()</code> raises if the file is missing or the count ≠ 38",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/data/class_names.py · transforms.py",
+      },
+
+      // ---------- Decision 5 ----------
+      {
+        type: "decision",
+        num: 5,
+        category: "Training",
+        categoryStyle: { bg: "bg-emerald-100", text: "text-emerald-700" },
+        title: "Optimizer, LRs, scheduler, regularization",
+        sections: [
+          {
+            heading: "Loss & optimizer",
+            items: [
+              "Loss: <code>nn.CrossEntropyLoss</code>",
+              "Optimizer: <code>torch.optim.AdamW</code> &nbsp;<strong>(not <code>Adam</code>)</strong>",
+            ],
+          },
+          {
+            heading: "Learning rates (Phase 2)",
+            items: [
+              "Head: <code>1e-3</code>, Backbone: <code>1e-4</code> (10× ratio)",
+            ],
+          },
+          {
+            heading: "Weight decay",
+            items: [
+              "<code>1e-4</code> on matrix weights",
+              "Bias and BatchNorm params: <code>weight_decay=0</code>",
+            ],
+          },
+          {
+            heading: "Scheduler",
+            items: [
+              "<code>ReduceLROnPlateau</code> on val loss · factor <code>0.5</code> · patience <code>2</code>",
+            ],
+          },
+          {
+            heading: "No LR warmup",
+            items: [
+              "The two-phase strategy serves the same purpose",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/training/optim.py · schedulers.py",
+      },
+
+      // ---------- Decision 6 ----------
+      {
+        type: "decision",
+        num: 6,
+        category: "Training",
+        categoryStyle: { bg: "bg-emerald-100", text: "text-emerald-700" },
+        title: "Training loop — batch size, epochs, early stopping",
+        sections: [
+          {
+            heading: "Batch size & device",
+            items: [
+              "<strong>Batch size 64</strong> (tuned for Apple M5 Pro, 64 GB unified memory)",
+              "<code>device='mps'</code>, <code>pin_memory=False</code>, <code>num_workers=4</code>, <code>persistent_workers=True</code>",
+            ],
+          },
+          {
+            heading: "Epoch budget",
+            items: [
+              "Phase 1: <strong>3 epochs</strong>",
+              "Phase 2: <strong>min 12, max 20</strong>",
+            ],
+          },
+          {
+            heading: "Early stopping",
+            items: [
+              "Monitor <strong>val accuracy</strong>, patience <strong>5</strong>",
+              "Best checkpoint saved by val accuracy → <code>artifacts/checkpoints/best.pt</code>",
+            ],
+          },
+          {
+            heading: "Overfitting detection",
+            items: [
+              "<code>train_val_acc_gap = train_acc − val_acc</code> logged to MLflow every epoch",
+            ],
+          },
+          {
+            heading: "Reproducibility",
+            items: [
+              "<code>set_seed(42)</code> at run start — seeds Python / NumPy / PyTorch / cuDNN",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/training/loop.py · seed.py",
+      },
+
+      // ---------- Decision 7 ----------
+      {
+        type: "decision",
+        num: 7,
+        category: "Tracking",
+        categoryStyle: { bg: "bg-cyan-100", text: "text-cyan-700" },
+        title: "Experiment tracking with MLflow",
+        sections: [
+          {
+            heading: "Setup",
+            items: [
+              "Tracking URI: <code>file:./artifacts/mlruns</code>",
+              "Experiment: <code>greenvision</code>",
+            ],
+          },
+          {
+            heading: "Run structure — NESTED",
+            items: [
+              "<strong>Parent:</strong> <code>attempt_NNN</code> — high-level params",
+              "<strong>Child:</strong> <code>phase1</code> (3 epochs, head-only)",
+              "<strong>Child:</strong> <code>phase2</code> (≤ 20 epochs, gradual unfreezing)",
+            ],
+          },
+          {
+            heading: "Per-epoch metrics (inside each child)",
+            items: [
+              "<code>train_loss</code>, <code>train_acc</code>, <code>val_loss</code>, <code>val_acc</code>",
+              "<code>train_val_acc_gap</code>, <code>lr_head</code>, <code>lr_backbone</code>, <code>phase2_from_idx</code>",
+            ],
+          },
+          {
+            heading: "Artifacts",
+            items: [
+              "<code>best.pt</code> via <code>log_artifact()</code> — phase2 child",
+              "Training curves PNG — phase2 child",
+              "Confusion matrix + per-class report (sklearn) — parent run",
+            ],
+          },
+        ],
+        codePath: "src/greenvision/training/mlflow_utils.py",
+      },
+
+      // ---------- Decision 8 ----------
+      {
+        type: "decision",
+        num: 8,
+        category: "Serving",
+        categoryStyle: { bg: "bg-rose-100", text: "text-rose-700" },
+        title: "Serving with FastAPI",
+        sections: [
+          {
+            heading: "Endpoints",
+            items: [
+              "<code>POST /predict</code> — multipart/form-data <em>(primary)</em>",
+              "<code>POST /predict_b64</code> — JSON with base64 image <em>(secondary)</em>",
+              "<code>GET /health</code> — liveness + model-loaded status",
+              "<code>GET /classes</code> — returns the 38 class names",
+              "<code>GET /docs</code> — Swagger UI (auto-generated)",
+            ],
+          },
+          {
+            heading: "Response — Pydantic-validated",
+            items: [
+              "<code>label</code>, <code>confidence</code>, <code>top_k</code> (3), <code>model_version</code>, <code>warnings</code>",
+            ],
+          },
+          {
+            heading: "Model loading",
+            items: [
+              "FastAPI <code>lifespan</code> — load once at startup, store on <code>app.state</code>",
+            ],
+          },
+          {
+            heading: "Data-quality warnings (non-blocking)",
+            items: [
+              "<code>min(w, h) &lt; 64 px</code> → \"Image is very small\"",
+              "Variance of Laplacian &lt; 100 → \"Image appears blurry\"",
+              "Top-1 probability &lt; 0.5 → \"Model is uncertain\"",
+            ],
+          },
+          {
+            heading: "HTTP error codes",
+            items: [
+              "<code>400</code> bad image · <code>413</code> too large · <code>422</code> schema · <code>500</code> unexpected · <code>503</code> not loaded",
+            ],
+          },
+        ],
+        codePath: "api/main.py",
+      },
+
+      // ---------- Open Question ----------
+      {
+        type: "open_question",
+        tocBadge: "?",
+        tocLabel: "Open question",
+        title: "One thing I'll test during implementation",
+        content: `
+          <h3 class="text-2xl font-semibold mb-4 text-slate-900">Phase 2a → 2b → 2c transition timing</h3>
+          <p class="text-lg text-slate-700 leading-relaxed mb-4">
+            The implementation guide currently sets a <strong>4-epoch interval</strong> between each Phase 2 unfreezing stage. That's a reasonable default — but I don't actually know whether it's right.
+          </p>
+          <p class="text-lg text-slate-700 leading-relaxed mb-3">
+            During Phase 2a, I'll watch the val-accuracy curve in MLflow:
+          </p>
+          <ul class="text-lg text-slate-700 space-y-2 list-disc list-outside ml-7 marker:text-slate-400 mb-4">
+            <li>If val accuracy is <strong>still improving</strong> at epoch 4 → <strong>delay</strong> the Phase 2b unfreeze.</li>
+            <li>If val accuracy has <strong>plateaued by epoch 3</strong> → <strong>advance</strong> Phase 2b earlier.</li>
+          </ul>
+          <p class="text-lg text-slate-700 leading-relaxed">
+            The principle: don't unfreeze deeper layers until the current stage has stopped extracting value. Same logic applies to the 2b → 2c transition.
+          </p>
+        `,
+      },
+    ];
+
+    // =========================================================
+    // STATE & NAVIGATION
+    // =========================================================
+    let currentSlide = 0;
+
+    function renderSlide(idx) {
+      currentSlide = idx;
+      const slide = slides[idx];
+      const content = document.getElementById("slide-content");
+
+      let html = "";
+
+      if (slide.type === "title") {
+        html = `
+          <div class="slide-enter flex flex-col justify-center min-h-[70vh]">
+            <div class="text-xs uppercase tracking-[0.2em] font-bold text-slate-400 mb-3">
+              W9D3 · 8 min talk · 4 min Q&amp;A
+            </div>
+            <h1 class="text-7xl font-bold tracking-tight mb-4 text-slate-900">GreenVision</h1>
+            <p class="text-2xl text-slate-600 mb-2 leading-relaxed">
+              Plant disease classifier — EfficientNet-B0 fine-tuned on PlantVillage
+            </p>
+            <p class="text-base text-slate-500 mb-10 leading-relaxed">
+              Tracked with MLflow · served with FastAPI · 38 classes · 54,306 images
+            </p>
+            <div class="border-t border-slate-200 pt-6 max-w-xl">
+              <div class="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">
+                What's in this outline
+              </div>
+              <ul class="text-base text-slate-700 space-y-1 list-disc list-outside ml-5 marker:text-slate-400">
+                <li>8 locked design decisions</li>
+                <li>1 open question to flag for implementation</li>
+              </ul>
+            </div>
+            <div class="mt-10">
+              <button onclick="goToSlide(1)" class="nav-btn px-5 py-2.5 bg-blue-600 text-white rounded-lg text-base font-semibold hover:bg-blue-700">
+                Start →
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (slide.type === "decision") {
+        const sectionsHtml = slide.sections
+          .map(
+            (s) => `
+              <div class="mb-6">
+                <div class="text-xs uppercase tracking-widest font-bold text-slate-500 mb-2">${s.heading}</div>
+                <ul class="space-y-2 list-disc list-outside ml-6 marker:text-slate-400">
+                  ${s.items
+                    .map(
+                      (i) => `<li class="text-lg leading-relaxed text-slate-800">${i}</li>`
+                    )
+                    .join("")}
+                </ul>
+              </div>
+            `
+          )
+          .join("");
+
+        html = `
+          <div class="slide-enter">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs uppercase tracking-[0.2em] font-bold text-slate-400">Decision ${slide.num} of 8</div>
+              <span class="${slide.categoryStyle.bg} ${slide.categoryStyle.text} px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase">
+                ${slide.category}
+              </span>
+            </div>
+            <h1 class="text-4xl font-bold tracking-tight mb-3 text-slate-900 leading-tight">${slide.title}</h1>
+            <div class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-semibold mb-8 border border-emerald-200">
+              <span>✓</span><span>Locked</span>
+            </div>
+            <div>${sectionsHtml}</div>
+            <div class="mt-8 pt-5 border-t border-slate-200 text-sm text-slate-500">
+              <span class="font-semibold text-slate-600">Code:</span>
+              &nbsp;<code class="mono">${slide.codePath}</code>
+            </div>
+          </div>
+        `;
+      } else if (slide.type === "open_question") {
+        html = `
+          <div class="slide-enter">
+            <div class="text-xs uppercase tracking-[0.2em] font-bold text-slate-400 mb-3">Open Question · 1 min</div>
+            <h1 class="text-4xl font-bold tracking-tight mb-6 text-slate-900 leading-tight">${slide.title}</h1>
+            <div class="bg-amber-50 border-l-4 border-amber-400 p-7 rounded-r-lg">
+              ${slide.content}
+            </div>
+            <div class="mt-8 text-sm text-slate-500 italic">
+              Q&amp;A follows.
+            </div>
+          </div>
+        `;
+      }
+
+      content.innerHTML = html;
+      content.scrollTop = 0;
+      renderToc(idx);
+      updateCounter();
+      updateNavButtons();
+    }
+
+    function renderToc(activeIdx) {
+      const toc = document.getElementById("toc");
+      toc.innerHTML = slides
+        .map((s, i) => {
+          const isActive = i === activeIdx;
+          let badge, label;
+          if (s.type === "title") {
+            badge = s.tocBadge;
+            label = s.tocLabel;
+          } else if (s.type === "decision") {
+            badge = String(s.num);
+            label = s.title;
+          } else if (s.type === "open_question") {
+            badge = s.tocBadge;
+            label = s.tocLabel;
+          }
+          return `
+            <button onclick="goToSlide(${i})" class="toc-item w-full text-left px-4 py-2.5 hover:bg-slate-50 ${
+              isActive ? "active" : ""
+            } flex items-start gap-3">
+              <span class="mono text-xs text-slate-400 font-bold mt-0.5 w-4 text-right">${badge}</span>
+              <span class="toc-label text-sm text-slate-600 leading-snug">${label}</span>
+            </button>
+          `;
+        })
+        .join("");
+    }
+
+    function updateCounter() {
+      document.getElementById("slide-counter").textContent = `${currentSlide + 1} / ${slides.length}`;
+    }
+
+    function updateNavButtons() {
+      document.getElementById("prev-btn").disabled = currentSlide === 0;
+      document.getElementById("next-btn").disabled = currentSlide === slides.length - 1;
+    }
+
+    function goToSlide(idx) {
+      if (idx >= 0 && idx < slides.length) {
+        renderSlide(idx);
+      }
+    }
+    function nextSlide() { goToSlide(currentSlide + 1); }
+    function prevSlide() { goToSlide(currentSlide - 1); }
+
+    // =========================================================
+    // KEYBOARD NAVIGATION
+    // =========================================================
+    document.addEventListener("keydown", (e) => {
+      // ignore if user is typing into a focused input
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
+        nextSlide();
+        e.preventDefault();
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        prevSlide();
+        e.preventDefault();
+      } else if (e.key === "Home") {
+        goToSlide(0);
+        e.preventDefault();
+      } else if (e.key === "End") {
+        goToSlide(slides.length - 1);
+        e.preventDefault();
+      } else if (/^[0-9]$/.test(e.key)) {
+        const digit = parseInt(e.key);
+        // 0 = title, 1-8 = decisions, 9 = open question
+        if (digit >= 0 && digit < slides.length) {
+          goToSlide(digit);
+        }
+        e.preventDefault();
+      }
+    });
+
+    // =========================================================
+    // BOOT
+    // =========================================================
+    document.getElementById("prev-btn").addEventListener("click", prevSlide);
+    document.getElementById("next-btn").addEventListener("click", nextSlide);
+    renderSlide(0);
+  </script>
+</body>
+</html>
