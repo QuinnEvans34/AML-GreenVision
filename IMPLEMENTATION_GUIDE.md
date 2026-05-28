@@ -630,17 +630,20 @@ def set_seed(seed: int = 42) -> None:
   - **Child run `phase1`**: 3 epochs, head-only training. Holds Phase 1 params (head LR, Phase 1 epochs).
   - **Child run `phase2`**: up to 20 epochs, gradual unfreezing. Holds Phase 2 params (head LR, backbone LR, weight decay, scheduler config, max epochs, early stop patience, unfreezing schedule).
 - **Per-epoch metrics** (logged inside each child run, with `step=epoch`): `train_loss`, `train_acc`, `val_loss`, `val_acc`, `train_val_acc_gap`, `lr_head`, `lr_backbone`, `phase2_from_idx` (Phase 2 only).
-- **Checkpoint logging**: `mlflow.log_artifact("artifacts/checkpoints/best.pt")` attached to the `phase2` child. The FastAPI handler loads from the canonical path; the MLflow copy is the audit trail.
+- **Model logging — `mlflow.pytorch.log_model`** *(updated for W9A1)*: the trained model is logged with `mlflow.pytorch.log_model(model, "model", registered_model_name="GreenVision")` on the **phase2** child run. This registers a new version in the MLflow Model Registry under the name `GreenVision`.
+- **Model Registry promotion** *(new for W9A1)*: after training completes and the best run is identified, a separate `scripts/promote.py` step uses `MlflowClient().transition_model_version_stage(name="GreenVision", version=N, stage="Production", archive_existing_versions=True)` to move the new version to Production and archive whatever was there before. The W10A1 serving layer (Decision 8) loads via `mlflow.pytorch.load_model("models:/GreenVision/Production")`.
 - **End-of-training artifacts**:
+  - **`class_names.json`** — logged to the phase2 child run via `mlflow.log_artifact(...)` so it travels in the same run as the registered model (W9A1 requirement). Also saved to the canonical `artifacts/checkpoints/class_names.json` from Decision 4.
   - **Training curves PNG** (`train/val loss` and `train/val accuracy` over epochs) — logged to the `phase2` child run.
   - **Confusion matrix PNG** (39×39 heatmap on the test set) — logged to the **parent** run.
   - **Per-class precision/recall/F1 report** (sklearn's `classification_report`, written to a `.txt`) — logged to the **parent** run.
+  - The `best.pt` checkpoint is still saved locally to `artifacts/checkpoints/best.pt` for dev-time convenience but is no longer the canonical artifact for serving.
 
 **Reasoning.**
 
 **Why nested runs.** A full GreenVision training attempt is one experiment that happens to have two phases — the parent run captures that, while each child gets only the params that apply to its phase (Phase 1 has no backbone LR; Phase 2's params are quite different). When comparing across attempts later, you compare parents; when drilling into "what happened in Phase 2 of attempt 5," you drill into the child. MLflow's UI supports this natively. Flat runs would either mix incompatible params (one big run with phase-switching) or lose the linkage entirely (two unrelated runs).
 
-**Why `log_artifact("best.pt")` and not `mlflow.pytorch.log_model`.** Our serving stack is FastAPI (Decision 8), not MLflow's built-in serving. `mlflow.pytorch.log_model` would wrap the checkpoint in MLflow's model-format machinery, register it in the Model Registry, and require MLflow at inference time — none of which we use. A plain artifact upload keeps the checkpoint decoupled and the API does a normal `torch.load`. Simpler, fewer dependencies at the API boundary.
+**Why `mlflow.pytorch.log_model` + Model Registry (W9A1 revision).** The original W8A1 design chose `mlflow.log_artifact("best.pt")` because it kept the FastAPI serving layer free of the MLflow dependency and let the API do a plain `torch.load`. The W9A1 rubric explicitly requires the opposite: `mlflow.pytorch.log_model` + Model Registry registration + Production-stage promotion + `mlflow.pytorch.load_model("models:/GreenVision/Production")` at serving time. So we're flipping. The new approach is actually better for the long run — URI-based loading (`models:/GreenVision/Production`) means we can roll models forward and back without filesystem hacks, and the Registry gives us version history and stage transitions for free. The original "fewer dependencies at the API boundary" concern is moot in practice because we already require MLflow at training time, and adding it at inference is a small cost for cleaner deployment semantics. The training code itself barely changes — just one `log_artifact("best.pt")` line becomes `mlflow.pytorch.log_model(...)`.
 
 **Why these three end-of-training artifacts.** Each one answers a different question after the run:
 - **Training curves** answer "did this run converge cleanly?" — phase-specific, so logged under the phase2 child.
@@ -714,20 +717,100 @@ def log_test_artifacts(y_true, y_pred, class_names):
 ```
 
 ```python
-# src/greenvision/training/run.py — top-level orchestration
+# src/greenvision/training/run.py — top-level orchestration (W9A1)
+import mlflow
+import mlflow.pytorch
+
 def train(attempt_id: str, ...):
     init_mlflow()
     with parent_run(attempt_id, parent_params):
         with phase_run("phase1", phase1_params):
             run_phase1(...)
         with phase_run("phase2", phase2_params):
-            history = run_phase2(...)
+            history, best_model = run_phase2(...)
             log_training_curves(history)
-            mlflow.log_artifact("artifacts/checkpoints/best.pt")
+
+            # W9A1: log the trained model via the pytorch flavor AND register it.
+            # `registered_model_name` creates/appends a new version to the registry.
+            mlflow.pytorch.log_model(
+                best_model,
+                "model",
+                registered_model_name="GreenVision",
+            )
+            # Class names travel in the SAME run as the model (W9A1 requirement).
             mlflow.log_artifact("artifacts/checkpoints/class_names.json")
-        # Final test-set evaluation under the parent run
+        # Final test-set evaluation logged under the parent run
         y_true, y_pred = evaluate_on_test(...)
         log_test_artifacts(y_true, y_pred, class_names)
+```
+
+```python
+# src/greenvision/training/registry.py — Model Registry helpers (new for W9A1)
+"""MLflow Model Registry helpers for promoting GreenVision to Production."""
+from __future__ import annotations
+from mlflow.tracking import MlflowClient
+
+MODEL_NAME = "GreenVision"
+
+def list_versions(client: MlflowClient | None = None):
+    """Every registered version of GreenVision, newest first."""
+    client = client or MlflowClient()
+    versions = client.search_model_versions(f"name='{MODEL_NAME}'")
+    return sorted(versions, key=lambda v: int(v.version), reverse=True)
+
+def promote_to_production(version: int, client: MlflowClient | None = None) -> None:
+    """Move the given version of GreenVision to Production.
+
+    Existing Production versions are automatically archived so we always have
+    exactly one Production model — what the FastAPI lifespan loads.
+    """
+    client = client or MlflowClient()
+    client.transition_model_version_stage(
+        name=MODEL_NAME,
+        version=str(version),
+        stage="Production",
+        archive_existing_versions=True,
+    )
+
+def verify_production_loads() -> None:
+    """Sanity check that `mlflow.pytorch.load_model` works on Production.
+
+    The W10A1 serving layer depends on this; if it fails here, it'll fail there too.
+    """
+    import mlflow.pytorch
+    model = mlflow.pytorch.load_model(f"models:/{MODEL_NAME}/Production")
+    print(f"✓ Production model loaded successfully — type: {type(model).__name__}")
+```
+
+```python
+# scripts/promote.py — CLI to promote a specific run's model
+"""Promote a trained model version to Production.
+
+Usage:
+    python scripts/promote.py --version 3
+"""
+import argparse
+from src.greenvision.training.mlflow_utils import init_mlflow
+from src.greenvision.training.registry import (
+    promote_to_production,
+    verify_production_loads,
+    list_versions,
+)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", type=int, required=True,
+                        help="GreenVision model version to promote")
+    args = parser.parse_args()
+
+    init_mlflow()
+    print("Current versions:", [(v.version, v.current_stage) for v in list_versions()])
+    promote_to_production(args.version)
+    verify_production_loads()
+    print(f"✓ GreenVision v{args.version} → Production")
+
+if __name__ == "__main__":
+    main()
 ```
 
 **Uncertain about.** Locked. Open implementation items:
@@ -862,23 +945,33 @@ class ClassesResponse(BaseModel):
     classes: list[str]
     count: int
 
-# --- lifespan: load once at startup ---
+# --- lifespan: load model from MLflow Model Registry at startup (W9A1 revision) ---
+import mlflow
+import mlflow.pytorch
+
+MLFLOW_TRACKING_URI = "file:./artifacts/mlruns"
+MODEL_URI = "models:/GreenVision/Production"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     class_names = load_class_names()    # raises if missing or wrong count
-    model = build_model(num_classes=len(class_names))
-    ckpt = torch.load(CHECKPOINT_PATH, map_location=device)
-    state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) else ckpt
-    model.load_state_dict(state_dict)
+
+    # Load model from the MLflow Model Registry — this is the canonical
+    # serving artifact (the local best.pt file is dev-only).
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    model = mlflow.pytorch.load_model(MODEL_URI)
     model.to(device).eval()
+
+    # Get the version number we actually loaded for the model_version field
+    from mlflow.tracking import MlflowClient
+    versions = MlflowClient().get_latest_versions("GreenVision", stages=["Production"])
+    model_version = f"v{versions[0].version}" if versions else "unknown"
 
     app.state.device         = device
     app.state.model          = model
     app.state.class_names    = class_names
-    app.state.model_version  = (
-        ckpt.get("attempt_id", "unknown") if isinstance(ckpt, dict) else "unknown"
-    )
+    app.state.model_version  = model_version
     yield
 
 app = FastAPI(title="GreenVision", lifespan=lifespan)
