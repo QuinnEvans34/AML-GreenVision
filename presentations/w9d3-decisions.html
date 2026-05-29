@@ -138,7 +138,7 @@
           {
             heading: "Classifier head (replaces the original 1000-class layer)",
             items: [
-              "<code>Dropout(p=0.3) → Linear(1280, 39)</code> &nbsp;<em>(39 = 38 PlantVillage + 1 No_plant_detected)</em>",
+              "<code>Dropout(p=0.3) → Linear(1280, 39)</code> &nbsp;<em>(39 = 38 PlantVillage + 1 Background_without_leaves)</em>",
             ],
           },
         ],
@@ -484,7 +484,7 @@
               Plant disease classifier — EfficientNet-B0 fine-tuned on PlantVillage
             </p>
             <p class="text-base text-slate-500 mb-10 leading-relaxed">
-              Tracked with MLflow · served with FastAPI · 39 classes (38 PlantVillage + No_plant_detected) · 54,306 images
+              Tracked with MLflow · served with FastAPI · 39 classes (38 PlantVillage + Background_without_leaves) · 54,306 images
             </p>
             <div class="border-t border-slate-200 pt-6 max-w-xl">
               <div class="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">

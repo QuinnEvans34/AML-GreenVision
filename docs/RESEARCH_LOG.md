@@ -74,7 +74,7 @@ What do each of these four transfer-learning-mechanics sub-topics actually mean,
   - **Early** (stem + first 2 MBConv stages): Gabor-like edges, color blobs, gradients — universal visual primitives, transfer to any image task.
   - **Middle** (MBConv 3–4): textures, corners, repeating patterns — still pretty general.
   - **Late** (MBConv 5–7 + final 1×1 conv expanding to 1280 channels): high-level features specialized to ImageNet classes (object parts).
-- The final `Linear(1280, 1000)` is ImageNet-specific and is always thrown away in transfer learning; for GreenVision we replace it with `Linear(1280, 39)` (38 PlantVillage classes + 1 `No_plant_detected` negative class).
+- The final `Linear(1280, 1000)` is ImageNet-specific and is always thrown away in transfer learning; for GreenVision we replace it with `Linear(1280, 39)` (38 PlantVillage classes + 1 `Background_without_leaves` negative class).
 - Implication for GreenVision: early/mid layers transfer beautifully to leaves; late layers benefit from fine-tuning to adapt away from ImageNet specifics.
 
 #### 1.2 Fine-tuning vs. feature extraction vs. training from scratch

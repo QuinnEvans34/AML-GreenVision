@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "greenvision"
+version = "0.1.0"
+description = "Plant disease classifier using EfficientNet-B0 fine-tuned on PlantVillage. Tracked with MLflow, served via FastAPI."
+authors = [{ name = "Quinn Evans", email = "qevans@student.neumont.edu" }]
+readme = "README.md"
+requires-python = ">=3.10"
+
+# Runtime dependencies are pinned in requirements.txt for now; not duplicating them here
+# so we have one source of truth. Use `pip install -r requirements.txt && pip install -e .`
+# at setup time.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["greenvision*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

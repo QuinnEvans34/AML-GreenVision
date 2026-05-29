@@ -148,7 +148,7 @@ Submit your `aml-greenvision` GitHub repository containing:
 - Next: Build serving layer
 ```
 
-> **Note on class count.** The template above says "1/38 classes" but our model has **39** classes after the W8A1 → W9A1 update (the 38 PlantVillage classes + 1 `No_plant_detected` negative class). Naive random baseline becomes 1/39 ≈ **2.56%**. Reflect that in the final report.
+> **Note on class count.** The template above says "1/38 classes" but our model has **39** classes after the W8A1 → W9A1 update (the 38 PlantVillage classes + 1 `Background_without_leaves` negative class). Naive random baseline becomes 1/39 ≈ **2.56%**. Reflect that in the final report.
 
 ---
 

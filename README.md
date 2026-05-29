@@ -1,6 +1,6 @@
 # GreenVision — W8A1 Submission
 
-A plant disease classifier built on **EfficientNet-B0** (pre-trained on ImageNet) and the **PlantVillage** dataset — 54,306 leaf images across **38** disease + healthy classes covering 14 crops, plus a **39th `No_plant_detected` negative class** trained from non-plant photos so the model can reject non-leaf input. Training runs are tracked with **MLflow**, and the trained model is served behind a **FastAPI** endpoint.
+A plant disease classifier built on **EfficientNet-B0** (pre-trained on ImageNet) and the **PlantVillage** dataset — 54,306 leaf images across **38** disease + healthy classes covering 14 crops, plus a **39th `Background_without_leaves` negative class** trained from non-plant photos so the model can reject non-leaf input. Training runs are tracked with **MLflow**, and the trained model is served behind a **FastAPI** endpoint.
 
 This repository is the design-phase submission for assignment **[W8A1] GreenVision Research & Implementation Design**.
 

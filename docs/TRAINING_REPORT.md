@@ -5,7 +5,7 @@
 ## Results
 
 - **Final val accuracy:** `X.XX%`
-- **Naive baseline (random):** `2.56%` (1/39 classes — 38 PlantVillage + 1 No_plant_detected)
+- **Naive baseline (random):** `2.56%` (1/39 classes — 38 PlantVillage + 1 Background_without_leaves)
 - **Improvement over baseline:** `+X.XX` percentage points
 
 ## Fine-tuning strategy
@@ -34,7 +34,7 @@
 
 ## Most surprising finding
 
-`[Fill in after training — one specific thing you didn't expect. Example candidates: "Phase 1 converged in 2 epochs, not 3 — would have benefited from extending Phase 2 instead." Or: "Val accuracy on the No_plant_detected class was harder to push past 90% than disease classes — the variance in non-plant images makes it less learnable." Or: "ReduceLROnPlateau fired exactly once and that single LR halving was enough — early stopping never triggered, training just naturally tapered."]`
+`[Fill in after training — one specific thing you didn't expect. Example candidates: "Phase 1 converged in 2 epochs, not 3 — would have benefited from extending Phase 2 instead." Or: "Val accuracy on the Background_without_leaves class was harder to push past 90% than disease classes — the variance in non-plant images makes it less learnable." Or: "ReduceLROnPlateau fired exactly once and that single LR halving was enough — early stopping never triggered, training just naturally tapered."]`
 
 ## Ready for Assignment W10A1
 

@@ -8,7 +8,7 @@
 
 ## Pre-flight checklist (do this BEFORE Phase 0)
 
-- [ ] PlantVillage dataset placed at `data/raw/PlantVillage/` with 38 disease folders + 1 `No_plant_detected/` folder = **39 subfolders total**.
+- [ ] PlantVillage dataset placed at `data/raw/PlantVillage/` with 38 disease folders + 1 `Background_without_leaves/` folder = **39 subfolders total**.
 - [ ] `requirements.txt` installed in the active Python 3.10+ environment.
 - [ ] MLflow can write to `artifacts/mlruns/` (no permission errors).
 - [ ] Apple Silicon device available: `python -c "import torch; print(torch.backends.mps.is_available())"` returns `True`.
@@ -353,10 +353,64 @@ python -c "import mlflow.pytorch; mlflow.set_tracking_uri('file:./artifacts/mlru
 
 ---
 
-## If something goes wrong during Phase 7 training
+## Troubleshooting & operational tips
 
-- **Loss is NaN.** LR too high. Check Phase 2 backbone LR (should be `1e-4`). Reduce by 5×.
-- **Val accuracy stuck around 1/39 (~2.5%).** Model isn't learning. Verify normalization is correct (per-channel mean ≈ 0, std ≈ 1 on training batches). Check Phase 1 actually unfroze the head.
-- **Val accuracy plateaus around 50-60%.** Probably converged too early. Extend Phase 2 epochs or unfreeze deeper layers earlier.
-- **Training is incredibly slow (> 30 min per epoch).** MPS fallback is hitting too many ops. Check terminal warnings; consider switching specific layers to CPU.
-- **`mlflow.pytorch.log_model` errors.** Usually missing dependency or in-active run. Confirm `mlflow.start_run()` context is open when called.
+### Symptom → fix table (high-leverage debug)
+
+When something breaks during training, check this table first. Most failures map to one of these:
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Val accuracy stuck at ~2.5% after Phase 1 | Model architecture broken **or** data loading failed | Check forward pass with a dummy input — does it return `[1, 39]`? If not, the head is wrong. If yes, the data isn't reaching the model — check normalization stats and dataloader output shape. |
+| Loss = `NaN` after a few batches | Learning rate too high | Reduce Phase 1 LR to `1e-4` or lower. If Phase 2 — reduce backbone LR from `1e-4` to `1e-5`. |
+| Phase 2 worse than Phase 1 | LR on pre-trained layers too high — catastrophic forgetting | Drop backbone LR to `1e-5` (head stays at `1e-3` — now a 100× ratio instead of 10×). This is the standard mitigation. |
+| `Expected tensor on device cpu but got mps` (or vice versa) | Data and model on different devices | Add `.to(device)` to **both** the model AND each batch (`x = x.to(device); y = y.to(device)`). |
+| Class names in wrong order at inference | Didn't save from `ImageFolder.classes` — reconstructed manually | Load from the MLflow artifact (or `artifacts/checkpoints/class_names.json`). Never reconstruct from a filesystem scan. |
+| Training is incredibly slow (>30 min per epoch on M5 Pro) | MPS fallback is hitting too many ops | Check terminal warnings (set `PYTORCH_ENABLE_MPS_FALLBACK=0` temporarily to see them). Consider an explicit `.cpu()` for the problem layer if it can't be helped. |
+| `mlflow.pytorch.log_model` errors | Not inside an active MLflow run | Confirm you're inside an `mlflow.start_run()` context (or the `phase_run` / `parent_run` context manager). |
+| `mlflow.pytorch.load_model("models:/GreenVision/Production")` fails | Model never got promoted OR tracking URI not set | Run `scripts/promote.py --version N`. Confirm `mlflow.set_tracking_uri("file:./artifacts/mlruns")` is called before `load_model`. |
+
+### Use IMPLEMENTATION_GUIDE.md as your debugging companion
+
+When stuck, **read the guide first**. The decision you documented three days ago is almost certainly the answer to why the code isn't working now.
+
+Quick lookup by symptom:
+
+| You're stuck on... | Re-read |
+|---|---|
+| Loss is NaN / gradients exploding | Decision 5 (LRs, weight decay), and Session 1.4 in `docs/RESEARCH_LOG.md` (catastrophic forgetting) |
+| Class names wrong | Decision 4 (class_names.json persistence + validation) |
+| Phase 2 destabilizes when a stage unfreezes | Sessions 1.3 / 1.4 in `RESEARCH_LOG.md` (freezing, BN gotcha, frozen vs. low-LR) |
+| MLflow logging confusion (what goes on parent vs. child) | Decision 7 (nested runs structure) |
+| API doesn't load model | Decision 8 lifespan (`mlflow.pytorch.load_model` from Registry, not `torch.load` on a path) |
+
+### MLflow run naming convention
+
+Tag runs descriptively. By the time you finish, you'll have 5+ runs — clear names make cross-run comparison possible.
+
+- ✅ `phase1_lr1e3_aug_v1`, `phase2_unfreeze6_wd1e4_v1`, `attempt_001_baseline`
+- ❌ `run_1`, `attempt_2`, `latest`, `final`
+
+The canonical `attempt_NNN` parent name (Decision 7) is fine for the *production* pipeline runs. For any **experimental** runs you make on top of the canonical pipeline (hyperparameter sweeps, "what if I drop weight_decay" tests), use the descriptive style.
+
+### Test your `.github/copilot-instructions.md`
+
+After committing the context file, open a new Python file in VS Code and type a comment like:
+
+```python
+# load the PlantVillage dataset and create train/val dataloaders with ImageNet normalization
+```
+
+Does Copilot's suggestion:
+- Use your constants (`IMAGENET_MEAN`, `IMG_SIZE = 224`)?
+- Use your conventions (`ImageFolder` + `stratified_split`, not random_split)?
+- Reference your paths (`data/raw/PlantVillage`)?
+- Honor your two-phase strategy when asked about training?
+
+If not, your instructions need more specificity. Re-test after any context-file edit. The whole point of those files is that AI assistants pick them up and respect them.
+
+### Phase-specific gotchas
+
+- **Phase 1 (head warm-up):** if val loss is still trending downward at epoch 3, extend to 5 epochs before starting Phase 2. The contingency is locked in Decision 2.
+- **Phase 2 stage transitions:** watch val accuracy at the start of Phase 2b and 2c. A sharp drop is catastrophic forgetting kicking in — either delay the next unfreeze or switch BN to `eval()` mode for the newly-unfrozen blocks.
+- **Phase 7 real training:** budget 2-6 hours wall-clock on M5 Pro. Don't kick it off 90 minutes before submission.
