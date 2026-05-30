@@ -1058,6 +1058,378 @@ async def predict_b64(req: Request, body: PredictB64Request):
 
 ---
 
+## Decision 9 — Treatment recommendation knowledge base
+
+**What I'm deciding.** Where the farmer-facing treatment text comes from, how it's structured, and how it's exposed to the API response.
+
+**Working choice.** ✅ Locked.
+
+- **Source:** A static JSON file at `data/treatments.json`, **39 entries keyed by the raw class string** (e.g., `"Tomato___Late_blight"`).
+- **Schema (per entry):**
+  - `display_name` — human-readable label (e.g., `"Tomato — Late blight"`)
+  - `is_healthy` (boolean) — true for the 12 `___healthy` classes
+  - `is_background` (boolean) — true only for `Background_without_leaves`
+  - `severity` — `"low" | "medium" | "high"` (omitted for healthy/background)
+  - `summary` — one-sentence plain-language description
+  - `time_sensitivity` — when the farmer should act (e.g., `"Apply within 7 days of first symptom"`)
+  - `action_steps` — array of 3–5 imperative bullets
+  - `sources` — array of `{name, url}` from US university extension publications
+- **Loading:** FastAPI loads the JSON once at startup (lifespan) into `app.state.treatments: dict[str, Treatment]`. Predict endpoint looks up the predicted class and returns the relevant fields in the response.
+- **Healthy classes:** `severity` and `action_steps` are replaced by `maintenance_tips` (general care guidance — irrigation, pruning, scouting cadence). No fungicide recommendations.
+- **Background_without_leaves:** Treatment response shape changes — instead of disease + treatment, returns `"No leaf detected"` plus retake guidance. The dashboard switches to a different UI state.
+
+**Reasoning.**
+
+**Why a static JSON file, not a database.** The treatment KB is read-only, 39 entries, and changes maybe once a quarter (when new extension publications come out). A database would be infrastructure overhead for a deployment that doesn't need it. JSON in the repo means the KB is version-controlled, diff-able in PRs, and ships with the code — no environment configuration to get wrong.
+
+**Why citations are part of the data structure, not a footer.** In Q&A, the instructor or a peer can ask "where did this treatment recommendation come from?" The presenter can pull up the prediction, click a citation, and read the source. Without that, the answer is "I copied from somewhere" — which is the failure mode the assignment explicitly calls out ("the tutorial / AI said so is not reasoning").
+
+**Why chemical families instead of brand names.** Fungicide brand availability is state-regulated and changes with EPA rulings. Saying "broad-spectrum copper-based fungicide" is durable; saying "Bonide Liquid Copper" is brittle and could be wrong by the time someone reads it. We sacrifice specificity for staying correct longer.
+
+**Why severity is per-disease, not per-prediction-confidence.** Severity is a property of the disease (Late blight is high-severity regardless of model confidence), while confidence is a property of the prediction. Conflating them would mean a healthy-leaf prediction with 0.4 confidence gets `severity: high` — nonsensical. The two signals stay independent and the dashboard combines them in the UI layer.
+
+**Why `is_background` is its own boolean.** It's behaviorally different from disease vs healthy — the entire response shape and UI treatment changes. Modeling it as a third value of an `enum` would let "background severity" exist; a boolean rules out that nonsense.
+
+**Where it shows up in code.**
+
+```python
+# api/treatments.py
+import json
+from pathlib import Path
+from typing import TypedDict
+
+class Treatment(TypedDict, total=False):
+    display_name: str
+    is_healthy: bool
+    is_background: bool
+    severity: str  # "low" | "medium" | "high"
+    summary: str
+    time_sensitivity: str
+    action_steps: list[str]
+    maintenance_tips: list[str]  # for healthy classes
+    sources: list[dict]  # {name, url}
+
+TREATMENTS_PATH = Path("data/treatments.json")
+
+def load_treatments() -> dict[str, Treatment]:
+    with TREATMENTS_PATH.open() as f:
+        return json.load(f)
+
+def get_treatment(treatments: dict[str, Treatment], class_name: str) -> Treatment:
+    if class_name not in treatments:
+        raise KeyError(f"No treatment entry for class: {class_name}")
+    return treatments[class_name]
+```
+
+**Uncertain about.** Locked. Implementation-time tunings:
+
+- Whether to add an `image_alt_text` field per disease for visual cross-reference (e.g., "Look for olive-green spots on the leaf underside"). Could improve farmer confidence in low-confidence predictions. Defer until Phase 4 user-testing.
+
+---
+
+## Decision 10 — Class name display formatting and dashboard UX patterns
+
+**What I'm deciding.** How raw `ImageFolder` class strings become user-readable text, and how the dashboard visually conveys confidence and disease severity.
+
+**Working choice.** ✅ Locked.
+
+**Class name formatting** (`web/lib/format-class-name.ts`):
+
+- `Apple___healthy` → `Apple (healthy)` — crop in primary text, "healthy" in muted parenthetical
+- `Tomato___Late_blight` → `Tomato — Late blight` — em dash separator, disease in title case with underscores → spaces
+- `Cherry___Powdery_mildew` → `Cherry — Powdery mildew`
+- `Corn___Cercospora_leaf_spot Gray_leaf_spot` → `Corn — Cercospora leaf spot / Gray leaf spot` — space-separated dual-name keeps both visible
+- `Pepper,_bell___Bacterial_spot` → `Bell pepper — Bacterial spot` — reorder comma form to natural language
+- `Background_without_leaves` → `No leaf detected` — entire UI state changes
+- `Tomato___Spider_mites Two-spotted_spider_mite` → `Tomato — Spider mites (two-spotted)`
+
+**Confidence visual encoding:**
+
+| Confidence | Band | Color | UI treatment |
+|---|---|---|---|
+| ≥ 0.85 | High | Emerald-500 | Standard layout; confidence badge prominent; treatment shown normally |
+| 0.70–0.85 | Moderate-high | Emerald-300 | Standard layout; subtle "high confidence" badge |
+| 0.40–0.70 | Medium | Amber-500 | Treatment shown but with "Model is moderately confident" prefix; top-3 alternatives visible |
+| < 0.40 | Low | Rose-500 | **Treatment hidden behind a "Show anyway" disclosure**; primary CTA becomes "Retake photo"; alternatives surfaced prominently |
+
+**Severity visual encoding** (independent of confidence):
+
+| Severity | Color | UI element |
+|---|---|---|
+| Low | Slate | Light-weight chip next to disease name |
+| Medium | Amber | Standard chip + "Act within X days" timer text |
+| High | Rose | Pulsing border on the result card + "Act immediately" callout |
+
+**AI disclaimer:**
+
+- Always present at the bottom of the result card.
+- Standard text: "AI-generated diagnosis. For critical decisions, consult a qualified agronomist or your local agricultural extension office."
+- **Strengthened** when confidence < 0.7: "Model confidence is low. This prediction should not be relied on alone. Please retake the photo or consult an expert."
+
+**Reasoning.**
+
+**Why formatting lives in the frontend, not the API.** The display string is a presentation concern — the same prediction might be rendered differently in a SMS notification vs the web dashboard vs an exported PDF. Keeping the raw class name in the API response and doing presentation transforms client-side preserves flexibility. Also: localization later (rendering "Tomato — Late blight" in Spanish or Swahili) lives where i18n libraries already do.
+
+**Why two independent dimensions (confidence + severity).** A high-confidence prediction of a low-severity disease should NOT alarm the farmer; a low-confidence prediction of a high-severity disease should alarm them MORE. Treating these as one dimension would either over-alarm (everything looks scary) or under-alarm (high-severity diseases with mid-confidence get ignored). Encoding them independently lets the UI combine them appropriately.
+
+**Why the 0.40 cutoff hides the treatment behind a disclosure.** At low confidence, the most likely failure mode is "the wrong disease's treatment gets applied" — which can cause real harm (wasted money, plant damage from wrong fungicide). Hiding the treatment behind an explicit "Show anyway" action makes the user signal that they understand the risk. The retake CTA is the right primary action.
+
+**Why "No leaf detected" is a complete UI state change, not just a different message.** The cognitive frame is different — there's no diagnosis to think about, only "the photo isn't usable." Sharing layout with disease predictions would suggest "this is a different disease called No-leaf" which is exactly the wrong mental model.
+
+**Where it shows up in code.**
+
+```typescript
+// web/lib/format-class-name.ts
+export function formatClassName(raw: string): { crop: string; condition: string; isHealthy: boolean } {
+  if (raw === "Background_without_leaves") {
+    return { crop: "", condition: "No leaf detected", isHealthy: false };
+  }
+  const [cropRaw, conditionRaw = ""] = raw.split("___");
+  const crop = cropRaw.replace(/,_bell/, "").replace(/Pepper/, "Bell pepper").trim();
+  if (conditionRaw === "healthy") {
+    return { crop, condition: "healthy", isHealthy: true };
+  }
+  const condition = conditionRaw.replace(/_/g, " ").trim();
+  return { crop, condition, isHealthy: false };
+}
+
+// web/components/confidence-badge.tsx
+type Band = "high" | "moderate" | "medium" | "low";
+export function getConfidenceBand(c: number): Band {
+  if (c >= 0.85) return "high";
+  if (c >= 0.70) return "moderate";
+  if (c >= 0.40) return "medium";
+  return "low";
+}
+```
+
+**Uncertain about.** Locked. Implementation-time tunings:
+
+- Whether to show a small thumbnail of a reference image of the predicted disease next to the user's upload — would let the farmer cross-check visually. Defer until Phase 4; might add as a stretch goal.
+
+---
+
+## Decision 11 — 3D visualization stack, data flow, and the four scenes
+
+**What I'm deciding.** Which library renders the 3D scenes, how the dashboard gets the training data behind them, and which scenes earn their build time.
+
+**Working choice.** ✅ Locked.
+
+- **Rendering library:** **React Three Fiber** (`@react-three/fiber`) + `@react-three/drei` (helpers: `OrbitControls`, `Html`, `Text`, `MeshTransmissionMaterial`). Backed by Three.js r150+.
+- **Why not Plotly 3D / Three.js bare / D3-3D:** Plotly 3D is great for data plots but limited in custom interactivity. Bare Three.js inside React requires manual imperative cleanup; R3F makes scenes declarative and React-idiomatic. D3-3D is fringe and underdocumented.
+- **Data flow:** Build-time export via `scripts/export_mlflow_for_dashboard.py` → `web/public/training_data.json`. **No live MLflow query at presentation time** — that's a reliability risk we don't need on stage.
+- **Four scenes locked:**
+  1. **Per-class accuracy 3D bar chart** — 39 bars in a 7×6 grid; height = recall; color = precision (rose→emerald gradient); hover → tooltip with class name, precision, recall, F1, support.
+  2. **3D confusion matrix** — 39×39 cubes; height = log(count + 1); diagonal tinted emerald, off-diagonal tinted rose; hover → "Predicted X, actually Y — N instances."
+  3. **Training curves in 3D** — train/val loss + accuracy as ribbons through space; X axis = epoch, Y = metric value, Z = train vs val; Phase 1→Phase 2 boundary marked with a translucent plane.
+  4. **Animated 3D architecture** — EfficientNet-B0 as 9 stacked blocks; "Play inference" button sends a glowing data particle through the blocks; predicted-class dot lights up at the classifier.
+- **Camera:** `OrbitControls` enabled on all scenes (mouse-drag to rotate, scroll to zoom, right-click to pan). Initial camera positions chosen so the diagonal of the confusion matrix is visible without rotation.
+- **Performance budget:** 30+ FPS on a Mac M-series with a single scene mounted. Each scene unmounts when navigating away (no shared canvas).
+- **Cut-line:** Scene 4 (architecture) is the lowest-value of the four and gets cut first if Phase 6 overruns past 6 PM Monday.
+
+**Reasoning.**
+
+**Why static JSON instead of live MLflow at presentation time.** The presentation runs on a laptop in a classroom. MLflow UI on `:5001` is fine for credibility, but the dashboard reading directly from `mlruns/` has too many failure modes (file paths, permissions, MLflow server status). A baked JSON file is bulletproof and trivially debuggable.
+
+**Why 4 scenes, not 1 or 8.** Each scene answers a distinct presentation question:
+- Per-class bars: "Where does the model fail?"
+- Confusion matrix: "Which classes confuse each other?"
+- Training curves: "Did training converge cleanly?"
+- Architecture: "What's actually happening during inference?"
+
+Fewer scenes would leave Q&A questions unsupported visually; more would dilute build time per scene.
+
+**Why React Three Fiber over bare Three.js.** Declarative scene graph means a React developer can read what's rendered the same way they'd read JSX. Imperative Three.js requires manual `dispose()` calls for materials and geometries on unmount — easy to leak memory. R3F handles that lifecycle automatically.
+
+**Why hover tooltips instead of click-to-select.** During a live presentation, the presenter is the user. Hovers don't require mouse precision the way clicks do — easier to land on a bar at the back of a 3D scene during a 10-minute talk than to precisely click it.
+
+**Where it shows up in code.**
+
+```typescript
+// web/components/viz/per-class-bars-3d.tsx — sketch
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, Html } from "@react-three/drei";
+import trainingData from "@/public/training_data.json";
+
+function Bar({ x, z, height, precision, label }: BarProps) {
+  const color = precisionToColor(precision); // rose → emerald gradient
+  return (
+    <mesh position={[x, height / 2, z]} castShadow>
+      <boxGeometry args={[0.8, height, 0.8]} />
+      <meshStandardMaterial color={color} />
+      <Html distanceFactor={10}>...tooltip...</Html>
+    </mesh>
+  );
+}
+
+export function PerClassBars3D() {
+  const metrics = trainingData.per_class_metrics;
+  return (
+    <Canvas shadows camera={{ position: [10, 8, 10], fov: 50 }}>
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[10, 10, 5]} intensity={0.8} castShadow />
+      <OrbitControls />
+      {metrics.map((m, i) => {
+        const x = (i % 7) - 3;
+        const z = Math.floor(i / 7) - 2.5;
+        return <Bar key={m.class_name} x={x} z={z}
+                    height={m.recall * 5}
+                    precision={m.precision}
+                    label={m.class_name} />;
+      })}
+    </Canvas>
+  );
+}
+```
+
+**Uncertain about.** Locked. Implementation-time tunings:
+
+- Whether to render scenes inside a `Suspense` boundary with a skeleton — depends on how slow first-paint feels on a fresh load. Decide during Phase 6 dry run.
+- Whether the architecture-3D scene should auto-play the animation on mount or only on button click. Auto-play looks alive but distracts during talking. Default: button click; revisit if presentation pacing demands otherwise.
+
+---
+
+## Decision 12 — Next.js application architecture
+
+**What I'm deciding.** Project structure, routing, state management, and the API integration pattern between Next.js and FastAPI.
+
+**Working choice.** ✅ Locked.
+
+- **Framework:** Next.js 14 (App Router), TypeScript strict mode, `src` dir off, alias `@/*`.
+- **Styling:** Tailwind CSS + shadcn/ui (New York style, slate base). No CSS modules.
+- **3D:** React Three Fiber + drei (see Decision 11).
+- **2D charts:** Recharts (for the simple per-epoch line plots in `/analytics`).
+- **Dark mode:** `next-themes` with system default + toggle in nav.
+- **State:** React local state (`useState`, `useReducer`). No Zustand/Redux. Server-side state is FastAPI's job.
+- **Routes (App Router):**
+  - `/` — Home / Diagnose: upload + result. The primary demo screen.
+  - `/analytics` — 3D viz suite + 2D per-epoch chart + per-class metric table.
+  - `/about` — Project context, repo link, team attribution.
+- **FastAPI integration:** `next.config.js` `rewrites()` mapping `/api/:path*` → `http://localhost:8000/:path*`. Frontend always calls `/api/...` — works in dev (rewrite) and in any future production deployment (rewrite or reverse proxy).
+- **Health check on mount:** Root layout does a `useEffect` GET `/api/health` on first mount. If it fails, a top-level banner renders "Backend not reachable" with retry button.
+- **API client:** Native `fetch`. Wrapped in `lib/api-client.ts` with `predict(file: File)` and `health()`.
+- **Type safety:** `lib/types.ts` mirrors the Pydantic schemas from `api/schemas.py`. The two are kept in sync manually for now (no codegen).
+
+**Reasoning.**
+
+**Why Next.js over Streamlit.** Streamlit is excellent for "internal tool in 30 minutes." It's not good for the kind of polished, animated, 3D-heavy presentation surface we need. Next.js gives us full control over typography, motion, and React Three Fiber integration. The cost is more code, but that code is straightforward and reusable for any future GreenVision frontend work.
+
+**Why App Router over Pages Router.** App Router is the current default and the direction Next.js is going. Server Components let us read `training_data.json` at the server without client-side fetch. We don't actually need Server Components much — most of our routes are client-rendered for interactivity — but App Router doesn't penalize that.
+
+**Why no Zustand/Redux.** The dashboard's state is tiny: selected file, prediction response, health status. All local to the route. Adding a global store is overhead with no payoff.
+
+**Why `next.config.js` rewrites instead of CORS.** CORS in dev requires the FastAPI middleware to be configured for `http://localhost:3000`, and any port mismatch silently breaks. Rewrites make the browser see a same-origin request, eliminating the CORS surface entirely. Production deployment would replace this with a reverse proxy (Nginx or a CDN edge function) — same shape, different runtime.
+
+**Why a health check on mount instead of on every request.** Polling health repeatedly is wasteful. The user discovers backend unavailability when they try to upload, and the result card surfaces the error then. The mount-time check just gives a friendlier first impression — "the backend is up" feels better than discovering it isn't when you click Diagnose.
+
+**Where it shows up in code.**
+
+```typescript
+// web/lib/api-client.ts
+import type { PredictionResponse, HealthResponse } from "./types";
+
+export async function health(): Promise<HealthResponse> {
+  const res = await fetch("/api/health");
+  if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
+  return res.json();
+}
+
+export async function predict(file: File): Promise<PredictionResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/predict", { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Prediction failed (${res.status}): ${body}`);
+  }
+  return res.json();
+}
+
+// web/next.config.js
+module.exports = {
+  async rewrites() {
+    return [{ source: "/api/:path*", destination: "http://localhost:8000/:path*" }];
+  },
+};
+```
+
+**Uncertain about.** Locked. Implementation-time tunings:
+
+- Whether `/analytics` should be a single scroll-down page or a tabbed interface. Single scroll is simpler to demo; tabs let the presenter jump precisely. Decide during Phase 6.
+- Whether to add a fourth `/changelog` route showing W8A1 → W9A1 → W10A1 progression for the grader. Low effort, possible credibility boost. Defer until Phase 9.
+
+---
+
+## Decision 13 — Demo orchestration (one-command launch)
+
+**What I'm deciding.** How the presenter starts the entire demo stack with a single command, and what the backup path looks like if a service fails mid-presentation.
+
+**Working choice.** ✅ Locked.
+
+- **Primary command:** `./scripts/demo.sh` from the repo root starts three processes in parallel via `concurrently`:
+  1. FastAPI on `:8000` — `uvicorn api.main:app`
+  2. Next.js on `:3000` — `npm run dev`
+  3. MLflow UI on `:5001` — `mlflow ui --backend-store-uri file:./mlruns`
+- **Output multiplexing:** `concurrently` prefixes log lines per process (API in cyan, UI in magenta, MLflow in yellow) so the presenter can see what's happening in one terminal.
+- **Pre-flight checks** (in the script before launching):
+  - `.venv` exists and is activated (or activate it).
+  - `models:/GreenVision/Production` loads (one-liner Python check).
+  - Ports 8000, 3000, 5001 are not already in use (else print a clear "kill the existing process" message).
+- **Backup command:** `./scripts/demo_static.sh` runs ONLY Next.js with `NEXT_PUBLIC_DEMO_MODE=static` env var. In this mode, the API client returns hardcoded prediction responses from cached fixtures in `web/public/demo-fixtures.json`. Used as insurance if FastAPI crashes on stage.
+- **Reset command:** `./scripts/demo_reset.sh` kills any running uvicorn/next/mlflow processes on ports 8000/3000/5001 and clears `.next/` cache. Useful between dry runs.
+
+**Reasoning.**
+
+**Why `concurrently` and not three terminals.** During a 10-minute presentation, the presenter cannot afford to switch terminal windows looking for which process logged an error. One terminal with prefixed logs keeps everything visible at once.
+
+**Why pre-flight checks.** The single most likely demo failure is "I forgot to promote the model" or "another process is on port 8000." Pre-flight catches both before Uvicorn fails 30 seconds into startup — when you'd be panicking mid-introduction.
+
+**Why a static-mode fallback exists at all.** A live demo is a single point of failure. The static fallback lets the presenter say "I'm going to switch to the offline demo because the backend is being temperamental" with calm confidence instead of "oh no, my demo is broken." It also lets the presenter rehearse with the same UI even when offline.
+
+**Why the static fixtures are real predictions, not mocks.** If the fallback ever has to run live, the predictions shown must be accurate. Capturing them from real `/predict` runs into `demo-fixtures.json` means "fallback mode looks identical to real mode except no upload form."
+
+**Where it shows up in code.**
+
+```bash
+# scripts/demo.sh
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# Pre-flight: ports free?
+for port in 8000 3000 5001; do
+  if lsof -i ":$port" >/dev/null 2>&1; then
+    echo "ERROR: port $port already in use. Run scripts/demo_reset.sh first."
+    exit 1
+  fi
+done
+
+# Pre-flight: model loads?
+.venv/bin/python -c "
+import mlflow, mlflow.pytorch
+mlflow.set_tracking_uri('./mlruns')
+m = mlflow.pytorch.load_model('models:/GreenVision/Production')
+print(f'✓ Production model ready ({type(m).__name__})')
+"
+
+# Install web deps if missing
+[ ! -d web/node_modules ] && (cd web && npm install)
+
+# Launch all three
+npx concurrently \
+  --names "API,UI,MLflow" \
+  --prefix-colors "cyan,magenta,yellow" \
+  "PYTHONPATH=src .venv/bin/uvicorn api.main:app --port 8000" \
+  "cd web && npm run dev" \
+  ".venv/bin/mlflow ui --backend-store-uri file:./mlruns --port 5001"
+```
+
+**Uncertain about.** Locked. Implementation-time tunings:
+
+- Whether `concurrently` should be installed globally or via `npx` (decides whether `npm install -g concurrently` is in the README). `npx` is simpler; tradeoff is each demo launch downloads the package if not cached. Default: `npx`.
+
+---
+
 ## Resolved during W9A1 implementation
 
 The W9A1 training run resolved most of the "open questions" from the W8A1 design phase. Here's what got empirically validated and what remains open for future runs.
