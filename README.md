@@ -1,8 +1,11 @@
-# GreenVision — W8A1 Submission
+# GreenVision — W8A1 + W9A1 Submission
 
 A plant disease classifier built on **EfficientNet-B0** (pre-trained on ImageNet) and the **PlantVillage** dataset — 54,306 leaf images across **38** disease + healthy classes covering 14 crops, plus a **39th `Background_without_leaves` negative class** trained from non-plant photos so the model can reject non-leaf input. Training runs are tracked with **MLflow**, and the trained model is served behind a **FastAPI** endpoint.
 
-This repository is the design-phase submission for assignment **[W8A1] GreenVision Research & Implementation Design**.
+This repository contains submissions for two assignments:
+
+- **[W8A1] GreenVision Research & Implementation Design** — design phase (research log, 8 design decisions, AI guardrails, presentations)
+- **[W9A1] GreenVision Training Pipeline** — implementation phase (runnable training pipeline, trained model registered as `GreenVision` @ Production in MLflow at **99.73% val accuracy / 99.73% test accuracy**, training report)
 
 ---
 
@@ -27,10 +30,25 @@ Every grading criterion in the assignment maps to one of the files below. Direct
 | **W9D2** (Tue, teaching topic) | Interactive AdamW vs. Adam visual demo — neural network animation with simulated gradients, the bug/fix story baked into the optimizer toggle | [`adamw-vs-adam-demo.html`](./adamw-vs-adam-demo.html) |
 | **W9D3** (Wed, implementation guide) | One-slide-per-decision outline for the 8-minute talk — sidebar TOC, keyboard navigation, locked-choice bullets | [`presentations/w9d3-decisions.html`](./presentations/w9d3-decisions.html) |
 
+---
+
+## 📋 W9A1 Submission Materials — where to find each deliverable
+
+| # | Assignment requirement | File path | Rubric criterion |
+|---|---|---|---|
+| 1 | **Training pipeline** — runnable end-to-end | [`scripts/train.py`](./scripts/train.py) + [`src/greenvision/`](./src/greenvision/) | Pipeline correctness (15 pts) |
+| 2 | **Trained model** — `GreenVision` @ Production, >80% val acc | MLflow Registry (file store: `./mlruns/`) — promoted via [`scripts/promote.py`](./scripts/promote.py) | Pipeline correctness (15 pts) |
+| 3 | **Strategy documented** — fine-tuning justified | [`IMPLEMENTATION_GUIDE.md`](./IMPLEMENTATION_GUIDE.md) Decisions 2 + 5 | Strategy justification (12.5 pts) |
+| 4 | **Design consistency** — ImageNet norm, class names preserved | [`src/greenvision/data/transforms.py`](./src/greenvision/data/transforms.py) + [`class_names.py`](./src/greenvision/data/class_names.py) | Design consistency (12.5 pts) |
+| 5 | **MLflow + context files** — experiments tracked + AI guardrails | [`src/greenvision/training/mlflow_utils.py`](./src/greenvision/training/mlflow_utils.py) + [`.github/copilot-instructions.md`](./.github/copilot-instructions.md) + [`.github/agent.md`](./.github/agent.md) | MLflow + context (10 pts) |
+| 6 | **`docs/TRAINING_REPORT.md`** — final results + reflection | [`docs/TRAINING_REPORT.md`](./docs/TRAINING_REPORT.md) | Required deliverable |
+| 7 | **MLflow screenshots** — val accuracy curve + Registry Production | [`docs/screenshots/`](./docs/screenshots/) | Required deliverable |
+
 ### Reference
 
-- Full assignment brief: [`ASSIGNMENT.md`](./ASSIGNMENT.md)
-- Project description and status: see the rest of this README
+- W8A1 assignment brief: [`ASSIGNMENT.md`](./ASSIGNMENT.md)
+- W9A1 assignment brief: [`ASSIGNMENT_W9A1.md`](./ASSIGNMENT_W9A1.md)
+- Build plan + Claude Code prompts used during W9A1: [`docs/IMPLEMENTATION_PLAN.md`](./docs/IMPLEMENTATION_PLAN.md) + [`docs/CLAUDE_PROMPTS.md`](./docs/CLAUDE_PROMPTS.md)
 
 ---
 
@@ -95,6 +113,12 @@ For the full design rationale behind every choice (head structure, two-phase fin
 
 ## Status
 
-**Design phase complete.** All eight design decisions are locked and documented; this repository contains the W8A1 deliverables only. The actual training code (currently a skeleton under `src/greenvision/` and `api/`) is built out during Weeks 9–10 of the course following the roadmap laid out in `IMPLEMENTATION_GUIDE.md`.
+**Design phase complete (W8A1) + implementation phase complete (W9A1).**
 
-**For graders:** every rubric criterion can be checked against a single file listed in the "W8A1 Submission Materials" table above.
+- All eight design decisions are locked and documented in `IMPLEMENTATION_GUIDE.md`
+- Training pipeline is runnable end-to-end via `python scripts/train.py --attempt-id N`
+- Model is trained, registered as `GreenVision` v3 @ **Production** in MLflow Registry
+- Final results: **val 99.73% / test 99.73%** (1/39 random baseline = 2.56%, so +97.17 pp improvement)
+- **Next:** W10A1 — build the FastAPI serving layer that loads `models:/GreenVision/Production` (the design is locked in `IMPLEMENTATION_GUIDE.md` Decision 8).
+
+**For graders:** every rubric criterion for both W8A1 and W9A1 can be checked against a single file listed in the submission materials tables above.

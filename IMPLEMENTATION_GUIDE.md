@@ -1058,9 +1058,30 @@ async def predict_b64(req: Request, body: PredictB64Request):
 
 ---
 
-## Open questions to resolve during implementation
+## Resolved during W9A1 implementation
 
-All eight decisions are locked. These are *implementation-time tuning items* — knobs to adjust during W9–10 based on empirical signals from MLflow:
+The W9A1 training run resolved most of the "open questions" from the W8A1 design phase. Here's what got empirically validated and what remains open for future runs.
+
+### Resolved (no change needed)
+
+- **Phase 1 epoch count** — locked at **3 epochs**. Val accuracy reached ~93% in Phase 1 alone with no signal that more head-only epochs were warranted. The extension contingency (3 → 5 if val loss still trending down) never fired.
+- **Phase 2 unfreezing schedule** — the `(0, 6) → (4, 3) → (8, 0)` schedule (4 epochs per stage) ran cleanly. No instability at any stage transition; no catastrophic forgetting observed.
+- **BatchNorm in Phase 2** — default `.train()` mode for unfrozen blocks worked fine. Never needed the "freeze BN" mitigation.
+- **`ReduceLROnPlateau` factor/patience (0.5 / 2)** — fired the right number of times without aggressively suppressing learning.
+- **Weight decay magnitude (1e-4)** — held val_acc and train_acc within 0.15 pp at every epoch; no overfitting signal that would warrant changing this.
+- **Early stopping patience (5)** — Phase 2 ran 21 epochs (5 epochs past the best at epoch 15), triggered early stopping as designed.
+- **Vertical flip in augmentation** — kept; per-class recall stayed high across all 39 classes.
+- **Uniform sampling vs weighted** — uniform worked; even the smallest class (`Potato___healthy`, 152 images) reached >99% recall. No weighted sampling needed.
+
+### Still open (revisit if conditions change)
+
+- **API-side `BLUR_THRESHOLD` and `LOW_CONFIDENCE` thresholds** — to be tuned during W10A1 against real user photos.
+- **File size limit (10 MB)** — to be tuned during W10A1.
+- **Out-of-distribution behavior** — the 99.73% test accuracy is *in-distribution* (PlantVillage's studio photos). Field photos would likely drop significantly. The W10A1 serving layer needs UI guidance to keep users on the trained distribution.
+
+## Open questions to resolve during W10A1
+
+All eight decisions are locked and W9A1 training completed cleanly. These are *implementation-time tuning items* — knobs to adjust during W10A1 based on real serving traffic:
 
 - Exact epoch timing for Phase 2a → 2b → 2c transitions (default 4 epochs each).
 - Phase 1 length contingency: extend from 3 to 5 if val loss still trending down.

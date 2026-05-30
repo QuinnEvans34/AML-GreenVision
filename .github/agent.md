@@ -31,6 +31,9 @@ These are hard stops. If a task seems to require any of them, **pause and ask th
 - **Do not change learning rates, batch size, or epoch counts** without confirmation. These are decisions the user is actively reasoning about and tracking.
 - **Do not remove error handling** — `try/except` blocks around image decoding, file I/O around checkpoints, HTTP 400/404/500 responses in API endpoints. If you think an error handler is dead code, ask before deleting.
 - **Do not skip MLflow logging** to "make the code cleaner." Every training run gets logged.
+- **Do not promote, archive, transition, or delete versions of the `GreenVision` registered model** in the MLflow Registry. The Production stage is the contract the W10A1 serving layer reads from. Stage transitions are deliberate human decisions made via `scripts/promote.py` — not Agent calls.
+- **Do not delete `mlruns/` or any sub-tree of it.** The file store backs both the experiment tracking AND the model registry. Deleting `mlruns/models/GreenVision/` removes the Production model the serving layer depends on.
+- **Do not change the registered model name** (`GreenVision`). It is hardcoded into `mlflow.pytorch.log_model(..., registered_model_name="GreenVision")` and the load URI `models:/GreenVision/Production`. Renaming silently desyncs every deployed serving instance.
 - **Do not re-implement preprocessing inside the API.** The FastAPI handler imports `eval_tfms` from `src/greenvision/data/transforms.py`. If you find yourself writing `transforms.Resize(...)` inside `api/`, you're doing the wrong thing.
 - **Do not commit data, model checkpoints, or MLflow runs** — `.gitignore` excludes them; don't override it.
 - **Do not introduce new dependencies** for functionality that could reasonably be written with what's already in `requirements.txt`.
@@ -44,7 +47,8 @@ Even for "small" changes, ask first before editing:
 - `IMPLEMENTATION_GUIDE.md` — the user's design document. Agent can read it to understand decisions, but should not edit it.
 - `ASSIGNMENT.md` — assignment brief; immutable reference.
 - `artifacts/checkpoints/**` — trained model weights and the `class_names.json` artifact.
-- `artifacts/mlruns/**` — MLflow run history.
+- `mlruns/**` — MLflow run history AND model registry (file-backed). Includes `mlruns/models/GreenVision/` which holds the registered model and its stage assignments.
+- `scripts/promote.py` — the only sanctioned path for stage transitions. Don't change the script's behavior to auto-promote on training completion.
 - `data/raw/**` and `data/processed/**` — the dataset.
 - `requirements.txt` — beyond the narrow "close a gap" case above.
 

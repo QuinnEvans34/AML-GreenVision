@@ -233,8 +233,8 @@ Expected: loss is a finite positive number, val_acc is a number in [0, 1]. Don't
 ```bash
 # Run a minimal MLflow experiment
 python scripts/_phase5_verify.py
-# Then look at the UI:
-mlflow ui --backend-store-uri file:./artifacts/mlruns
+# Then look at the UI (training writes to ./mlruns; port 5000 is taken by macOS AirPlay):
+mlflow ui --backend-store-uri file:./mlruns --port 5001
 # In your browser, confirm:
 #   - experiment "greenvision" exists
 #   - one parent run "attempt_test"
@@ -280,7 +280,7 @@ python scripts/train.py \
 PYTORCH_ENABLE_MPS_FALLBACK=1 python scripts/train.py --attempt-id 001
 ```
 
-**Monitor in MLflow UI:** `mlflow ui --backend-store-uri file:./artifacts/mlruns` in another terminal.
+**Monitor in MLflow UI:** `mlflow ui --backend-store-uri file:./mlruns --port 5001` in another terminal. (The tracking store is `./mlruns` per `src/greenvision/training/mlflow_utils.py`; `--port 5001` avoids macOS Control Center/AirPlay on 5000.)
 
 **Expected timing on M5 Pro:**
 
