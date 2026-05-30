@@ -229,7 +229,7 @@ def from_idx_for(epoch: int) -> int:
 
 **Uniform sampling, not weighted.** Weighted sampling forces rare-class images to be seen multiple times per epoch, which can backfire when those classes have few representative images — the model memorizes the same handful of pictures instead of learning generalizable features. With strong augmentation and dropout, class imbalance often resolves on its own. We start with uniform sampling and monitor per-class precision/recall in MLflow after Phase 2. If rare classes underperform (e.g., recall < 0.7 on classes with <500 images), the mitigation is to switch to `WeightedRandomSampler` *or* class-weighted cross-entropy loss for the next run — but not preemptively.
 
-**The 39th class — `Background_without_leaves` (negative class).** Alongside the 38 PlantVillage disease classes, the training set includes a folder of non-plant photos (vehicles, indoor scenes, random subjects). This "negative class" teaches the model to *reject* obviously non-leaf inputs at inference instead of confidently classifying a car photo as a tomato disease. It's trained the same way as the other 38 classes — same `train_tfms`, same uniform sampling, same `CrossEntropyLoss` — and the API surfaces a specific warning when this class wins (see Decision 8). Folder name `Background_without_leaves` is a placeholder; the real folder name is finalized once the dataset is provided, which only affects ImageFolder's alphabetical class-index position.
+**The 39th class — `Background_without_leaves` (negative class).** Alongside the 38 PlantVillage disease classes, the training set includes a folder of non-plant photos (vehicles, indoor scenes, random subjects). This "negative class" teaches the model to *reject* obviously non-leaf inputs at inference instead of confidently classifying a car photo as a tomato disease. It's trained the same way as the other 38 classes — same `train_tfms`, same uniform sampling, same `CrossEntropyLoss` — and the API surfaces a specific warning when this class wins (see Decision 8). The folder name `Background_without_leaves` matches the professor's curated dataset; in `ImageFolder`'s alphabetical sort it lands at class index 4 (after the four `Apple___*` classes).
 
 **Where it shows up in code.**
 
@@ -623,7 +623,7 @@ def set_seed(seed: int = 42) -> None:
 
 **Working choice.** ✅ Locked.
 
-- **Tracking URI**: `file:./artifacts/mlruns`. Portable in the repo, no external server needed.
+- **Tracking URI**: `file:./mlruns`. Portable in the repo, no external server needed. The same file store backs the Model Registry (`mlruns/models/GreenVision/`).
 - **Experiment name**: `greenvision`.
 - **Run structure — nested**: each full training attempt is a **parent run** containing two child runs (`phase1` and `phase2`).
   - **Parent run** name: `attempt_NNN`. Holds experiment-level params (seed, dataset version, image size, num classes, batch size, ImageNet mean/std).
@@ -662,7 +662,7 @@ import matplotlib.pyplot as plt
 import mlflow
 from sklearn.metrics import confusion_matrix, classification_report
 
-TRACKING_URI = "file:./artifacts/mlruns"
+TRACKING_URI = "file:./mlruns"
 EXPERIMENT = "greenvision"
 
 def init_mlflow() -> None:
@@ -790,8 +790,8 @@ Usage:
     python scripts/promote.py --version 3
 """
 import argparse
-from src.greenvision.training.mlflow_utils import init_mlflow
-from src.greenvision.training.registry import (
+from greenvision.training.mlflow_utils import init_mlflow
+from greenvision.training.registry import (
     promote_to_production,
     verify_production_loads,
     list_versions,
@@ -909,9 +909,9 @@ from PIL import Image
 from pydantic import BaseModel, Field
 from scipy import ndimage
 
-from src.greenvision.data.transforms import eval_tfms
-from src.greenvision.data.class_names import load_class_names
-from src.greenvision.models.efficientnet_head import build_model
+from greenvision.data.transforms import eval_tfms
+from greenvision.data.class_names import load_class_names
+from greenvision.models.efficientnet_head import build_model
 
 # --- config ---
 CHECKPOINT_PATH = Path("artifacts/checkpoints/best.pt")
@@ -949,7 +949,7 @@ class ClassesResponse(BaseModel):
 import mlflow
 import mlflow.pytorch
 
-MLFLOW_TRACKING_URI = "file:./artifacts/mlruns"
+MLFLOW_TRACKING_URI = "file:./mlruns"
 MODEL_URI = "models:/GreenVision/Production"
 
 @asynccontextmanager

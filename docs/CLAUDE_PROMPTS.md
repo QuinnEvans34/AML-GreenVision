@@ -189,7 +189,7 @@ Context to read first:
 Create:
 
 1. src/greenvision/training/mlflow_utils.py
-   - Module constants: TRACKING_URI = "file:./artifacts/mlruns", EXPERIMENT = "greenvision"
+   - Module constants: TRACKING_URI = "file:./mlruns", EXPERIMENT = "greenvision"
    - init_mlflow(): sets tracking URI and experiment
    - @contextmanager parent_run(attempt_id, params): yields run, logs params at start
    - @contextmanager phase_run(phase, params): nested=True child run, logs params at start
@@ -210,7 +210,7 @@ After creating, write a small script scripts/_phase5_verify.py that:
 - Opens a parent_run
 - Opens a phase_run("phase1", {...}) and logs a single metric
 - Opens a phase_run("phase2", {...}) and logs metrics + a fake model via log_model_to_registry
-- Then run it and confirm via "mlflow ui --backend-store-uri file:./artifacts/mlruns" that nested runs appear, the model is logged, and the GreenVision model shows up in the Models tab.
+- Then run it and confirm via "mlflow ui --backend-store-uri file:./mlruns" that nested runs appear, the model is logged, and the GreenVision model shows up in the Models tab.
 ```
 
 ---
@@ -269,7 +269,7 @@ Before kicking off, walk through the IMPLEMENTATION_PLAN.md Phase 7 section with
 If everything is green, kick off:
     PYTORCH_ENABLE_MPS_FALLBACK=1 python scripts/train.py --attempt-id 001
 
-While it runs, in a separate terminal, start `mlflow ui --backend-store-uri file:./artifacts/mlruns` so I can monitor.
+While it runs, in a separate terminal, start `mlflow ui --backend-store-uri file:./mlruns` so I can monitor.
 
 If anything goes wrong during training (NaN loss, accuracy stalls, crashes), apply the relevant contingency from IMPLEMENTATION_PLAN.md Phase 7 troubleshooting section — but check with me before changing hyperparameters.
 
@@ -286,12 +286,13 @@ This is Phase 8 from docs/IMPLEMENTATION_PLAN.md.
 Steps:
 1. Look at the MLflow UI and identify the GreenVision Model Registry version that corresponds to my best training run.
 2. Run: python scripts/promote.py --version N (where N is that version)
-3. Verify: python -c "import mlflow.pytorch; mlflow.set_tracking_uri('file:./artifacts/mlruns'); m = mlflow.pytorch.load_model('models:/GreenVision/Production'); print(type(m))"
+3. Verify: python -c "import mlflow.pytorch; mlflow.set_tracking_uri('file:./mlruns'); m = mlflow.pytorch.load_model('models:/GreenVision/Production'); print(type(m))"
    Expected output includes 'EfficientNet' in the type name.
 
 4. Then walk me through capturing the two required screenshots:
-   - docs/screenshots/val_accuracy_curve.png — from the best run's phase2 child, the val_acc metric chart
-   - docs/screenshots/registry_production.png — from the Models tab, GreenVision @ Production stage
+   - docs/screenshots/Val_accuracy.png — from the best run's phase2 child, the val_acc metric chart
+   - docs/screenshots/model_registry.png — from the Models tab, GreenVision @ Production stage
+   - (bonus) docs/screenshots/training_curves.png — the full train/val loss + accuracy chart
 
 Tell me the macOS shortcut sequence for area screenshots so I can capture them quickly (Cmd+Shift+4 etc.) and where on disk to save them.
 ```
@@ -388,6 +389,6 @@ scripts/promote.py                      ← promote a model version
 
 artifacts/checkpoints/best.pt           ← best checkpoint (dev-only)
 artifacts/checkpoints/class_names.json  ← canonical class names
-artifacts/mlruns/                       ← MLflow tracking store
+mlruns/                                 ← MLflow tracking store + Model Registry (file-backed, repo-local)
 docs/screenshots/                       ← W9A1 deliverable screenshots
 ```

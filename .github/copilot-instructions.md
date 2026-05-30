@@ -4,7 +4,7 @@
 
 ## Project description
 
-**GreenVision** is a plant disease classifier. Given a single leaf image, it predicts one of 38 PlantVillage classes (disease state × crop, plus healthy classes) covering 14 crops. The model is **EfficientNet-B0**, pre-trained on ImageNet, fine-tuned on PlantVillage. Training runs are tracked with **MLflow**. The trained model is served behind a **FastAPI** endpoint.
+**GreenVision** is a plant disease classifier. Given a single leaf image, it predicts one of **39 classes** — 38 PlantVillage disease + healthy classes (14 crops) plus a 39th `Background_without_leaves` negative class for rejecting non-leaf input. The model is **EfficientNet-B0**, pre-trained on ImageNet, fine-tuned on PlantVillage. Training runs are tracked with **MLflow**. The trained model is served behind a **FastAPI** endpoint.
 
 **Users:** growers, agronomists, ag-tech app developers. They upload a leaf photo and expect back a class label + confidence. Mispredictions caused by silent preprocessing drift (wrong normalization, swapped class indices) are the single worst failure mode for these users — they look like working predictions and aren't.
 
@@ -14,7 +14,7 @@
 - **Classes:** **39 total.** 38 PlantVillage classes (each encoding a `(crop, condition)` pair, with "healthy" variants for each of the 14 crops), plus 1 **`Background_without_leaves`** negative class. The negative class is trained from a folder of random non-plant photos (vehicles, indoor scenes, etc.) so the model can reject obviously non-leaf input instead of confidently misclassifying it.
 - **Layout (on disk):** `torchvision.datasets.ImageFolder` format — `data/raw/PlantVillage/<class_name>/<image>.jpg`. The non-plant folder lives at the same level as the disease folders (e.g., `data/raw/PlantVillage/Background_without_leaves/<image>.jpg`).
 - **Class index assignment:** `ImageFolder` sorts class folder names **alphabetically** and assigns indices in that order. This ordering must be captured as an artifact (`artifacts/checkpoints/class_names.json`) at training time and reloaded at inference time. **Never re-derive class names at inference by scanning the filesystem.**
-- **Class naming convention:** PlantVillage folder names look like `Tomato___Late_blight` or `Apple___healthy` — crop and condition separated by triple underscores. Preserve them as-is. The negative class uses a simple `Background_without_leaves` name (placeholder — finalize once dataset is provided).
+- **Class naming convention:** PlantVillage folder names look like `Tomato___Late_blight` or `Apple___healthy` — crop and condition separated by triple underscores. Preserve them as-is. The negative class folder is `Background_without_leaves` (finalized; matches the professor's curated dataset).
 
 ## Critical constants
 
@@ -92,4 +92,4 @@ Class names are persisted **once** to `artifacts/checkpoints/class_names.json` a
 
 ### Tracking
 
-Every training attempt is an MLflow run logged to `file:./artifacts/mlruns`. Per-epoch metrics (`train_loss`, `train_acc`, `val_loss`, `val_acc`) and the best checkpoint are attached. If you're tempted to "just train it quickly without logging", don't — losing a run's hyperparameters means losing the run.
+Every training attempt is an MLflow run logged to `file:./mlruns` (the local file store backs both experiment tracking and the Model Registry). Per-epoch metrics (`train_loss`, `train_acc`, `val_loss`, `val_acc`) and the best checkpoint are attached. The best model is registered to the MLflow Model Registry as `GreenVision` and promoted to the `Production` stage via `scripts/promote.py` — that's what the W10A1 serving layer loads via `mlflow.pytorch.load_model("models:/GreenVision/Production")`. If you're tempted to "just train it quickly without logging", don't — losing a run's hyperparameters means losing the run.

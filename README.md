@@ -42,7 +42,7 @@ Every grading criterion in the assignment maps to one of the files below. Direct
 | 4 | **Design consistency** — ImageNet norm, class names preserved | [`src/greenvision/data/transforms.py`](./src/greenvision/data/transforms.py) + [`class_names.py`](./src/greenvision/data/class_names.py) | Design consistency (12.5 pts) |
 | 5 | **MLflow + context files** — experiments tracked + AI guardrails | [`src/greenvision/training/mlflow_utils.py`](./src/greenvision/training/mlflow_utils.py) + [`.github/copilot-instructions.md`](./.github/copilot-instructions.md) + [`.github/agent.md`](./.github/agent.md) | MLflow + context (10 pts) |
 | 6 | **`docs/TRAINING_REPORT.md`** — final results + reflection | [`docs/TRAINING_REPORT.md`](./docs/TRAINING_REPORT.md) | Required deliverable |
-| 7 | **MLflow screenshots** — val accuracy curve + Registry Production | [`docs/screenshots/`](./docs/screenshots/) | Required deliverable |
+| 7 | **MLflow screenshots** — val accuracy curve + Registry Production | [`docs/screenshots/Val_accuracy.png`](./docs/screenshots/Val_accuracy.png), [`model_registry.png`](./docs/screenshots/model_registry.png), bonus [`training_curves.png`](./docs/screenshots/training_curves.png) | Required deliverable |
 
 ### Reference
 
@@ -96,14 +96,14 @@ Items marked **⭐** are the W8A1 submission deliverables.
 
 ## Project summary
 
-**GreenVision** classifies an uploaded leaf image into one of 38 PlantVillage classes (disease state × crop, plus healthy classes) across 14 crops, using EfficientNet-B0 fine-tuned on PlantVillage.
+**GreenVision** classifies an uploaded leaf image into one of **39 classes** — 38 PlantVillage disease + healthy classes across 14 crops, plus a 39th `Background_without_leaves` negative class for rejecting non-leaf inputs — using EfficientNet-B0 fine-tuned on PlantVillage.
 
 **Target users:** growers, agronomists, and ag-tech apps that need a quick triage signal before reaching for more expensive diagnostics.
 
 **Architecture (the four non-negotiables from the assignment):**
 
 - **Base model:** EfficientNet-B0, pre-trained on ImageNet
-- **Dataset:** PlantVillage — 54,306 images, 38 classes, 14 crops
+- **Dataset:** PlantVillage — 54,306 leaf images across 38 disease + healthy classes (14 crops) + a `Background_without_leaves` folder = **39 classes total**
 - **Experiment tracking:** MLflow (nested runs, file-backed)
 - **Serving:** FastAPI (multipart primary, base64 secondary, Pydantic responses)
 

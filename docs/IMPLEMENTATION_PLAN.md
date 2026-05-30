@@ -10,7 +10,7 @@
 
 - [ ] PlantVillage dataset placed at `data/raw/PlantVillage/` with 38 disease folders + 1 `Background_without_leaves/` folder = **39 subfolders total**.
 - [ ] `requirements.txt` installed in the active Python 3.10+ environment.
-- [ ] MLflow can write to `artifacts/mlruns/` (no permission errors).
+- [ ] MLflow can write to `mlruns/` at the repo root (no permission errors).
 - [ ] Apple Silicon device available: `python -c "import torch; print(torch.backends.mps.is_available())"` returns `True`.
 - [ ] Cursor / VS Code / Claude Code extension open with the project root.
 
@@ -87,7 +87,7 @@ df -h .
 
 ```python
 # scripts/_phase1_verify.py
-from src.greenvision.data.datasets import build_dataloaders
+from greenvision.data.datasets import build_dataloaders
 train_loader, val_loader, test_loader, class_names = build_dataloaders(
     "data/raw/PlantVillage", batch_size=64
 )
@@ -121,7 +121,7 @@ Expected: 39 classes, train batches > 0, per-channel mean near 0, std near 1.
 ```python
 # scripts/_phase2_verify.py
 import torch
-from src.greenvision.models.efficientnet_head import build_model
+from greenvision.models.efficientnet_head import build_model
 model = build_model(num_classes=39)
 model.eval()
 x = torch.randn(2, 3, 224, 224)
@@ -153,9 +153,9 @@ print(f"✓ Trainable params: {sum(p.numel() for p in model.parameters() if p.re
 
 ```python
 # scripts/_phase3_verify.py
-from src.greenvision.models.efficientnet_head import build_model
-from src.greenvision.training.phases import freeze_all_backbone, unfreeze_from_block
-from src.greenvision.training.optim import build_optimizer
+from greenvision.models.efficientnet_head import build_model
+from greenvision.training.phases import freeze_all_backbone, unfreeze_from_block
+from greenvision.training.optim import build_optimizer
 
 model = build_model()
 # Phase 1 freeze
@@ -191,9 +191,9 @@ print(f"Phase 2a — trainable: {trainable_2a}/{all_p} (expect more than phase 1
 ```python
 # scripts/_phase4_verify.py — runs 1 epoch on a 200-image subset
 from torch.utils.data import Subset, DataLoader
-from src.greenvision.data.datasets import build_dataloaders
-from src.greenvision.models.efficientnet_head import build_model
-from src.greenvision.training.loop import train_one_epoch, evaluate
+from greenvision.data.datasets import build_dataloaders
+from greenvision.models.efficientnet_head import build_model
+from greenvision.training.loop import train_one_epoch, evaluate
 import torch.nn as nn, torch
 
 train_loader, val_loader, _, _ = build_dataloaders("data/raw/PlantVillage", batch_size=32)
@@ -308,14 +308,15 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 python scripts/train.py --attempt-id 001
 python scripts/promote.py --version N
 
 # 3. Verify the URI loads
-python -c "import mlflow.pytorch; mlflow.set_tracking_uri('file:./artifacts/mlruns'); print(type(mlflow.pytorch.load_model('models:/GreenVision/Production')))"
+python -c "import mlflow.pytorch; mlflow.set_tracking_uri('file:./mlruns'); print(type(mlflow.pytorch.load_model('models:/GreenVision/Production')))"
 # expect: <class 'torchvision.models.efficientnet.EfficientNet'>
 ```
 
 **Screenshots to capture** (open MLflow UI, take screenshots, save to `docs/screenshots/`):
 
-1. `docs/screenshots/val_accuracy_curve.png` — the val accuracy curve from the best run's `phase2` child
-2. `docs/screenshots/registry_production.png` — Models tab → GreenVision → showing version N @ Production
+1. `docs/screenshots/Val_accuracy.png` — the val accuracy curve from the best run's `phase2` child
+2. `docs/screenshots/model_registry.png` — Models tab → GreenVision → showing version N @ Production
+3. (bonus) `docs/screenshots/training_curves.png` — train/val loss + accuracy chart logged to the parent run
 
 ---
 
@@ -368,7 +369,7 @@ When something breaks during training, check this table first. Most failures map
 | Class names in wrong order at inference | Didn't save from `ImageFolder.classes` — reconstructed manually | Load from the MLflow artifact (or `artifacts/checkpoints/class_names.json`). Never reconstruct from a filesystem scan. |
 | Training is incredibly slow (>30 min per epoch on M5 Pro) | MPS fallback is hitting too many ops | Check terminal warnings (set `PYTORCH_ENABLE_MPS_FALLBACK=0` temporarily to see them). Consider an explicit `.cpu()` for the problem layer if it can't be helped. |
 | `mlflow.pytorch.log_model` errors | Not inside an active MLflow run | Confirm you're inside an `mlflow.start_run()` context (or the `phase_run` / `parent_run` context manager). |
-| `mlflow.pytorch.load_model("models:/GreenVision/Production")` fails | Model never got promoted OR tracking URI not set | Run `scripts/promote.py --version N`. Confirm `mlflow.set_tracking_uri("file:./artifacts/mlruns")` is called before `load_model`. |
+| `mlflow.pytorch.load_model("models:/GreenVision/Production")` fails | Model never got promoted OR tracking URI not set | Run `scripts/promote.py --version N`. Confirm `mlflow.set_tracking_uri("file:./mlruns")` is called before `load_model`. |
 
 ### Use IMPLEMENTATION_GUIDE.md as your debugging companion
 
