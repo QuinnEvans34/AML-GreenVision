@@ -1,9 +1,11 @@
-# [W10A1] GreenVision Final Submission & Presentation
+# [W10P1] GreenVision Final Submission & Presentation
 
 **Due:** Wednesday by 11:59pm
 **Points:** 50
 **Submitting:** a website URL
 **Available until:** Jun 3 at 11:59pm
+
+> Repo filename is `ASSIGNMENT_W10A1.md` for symmetry with the W8A1/W9A1 reference files; the actual Canvas assignment ID is **W10P1**.
 
 ---
 
@@ -142,7 +144,8 @@ These aren't in the rubric but are non-negotiable for our "go big or go home" ex
 |---|---|
 | **Treatment knowledge base** (`data/treatments.json`) | 39 entries with summary, action steps, severity, and cited sources. The "treatment recommendation" requirement is the wildcard — a curated KB is the difference between credible advice and demo-grade filler. |
 | **3D confusion matrix viz** | Live, interactive 39×39 height-field rendered in the dashboard. Lets the presenter point at specific class confusions during Q&A instead of describing them. |
-| **3D per-class accuracy bar chart** | 39 vertical bars, height = recall, color = precision. Rotatable. |
-| **3D training-curves scene** | Loss + accuracy plotted with epoch as the third axis — for the "training results" segment. |
-| **Animated 3D architecture diagram** | EfficientNet-B0 layers as 3D blocks with animated data flow during the "walk me through inference" Q&A answer. |
-| **One-command demo orchestration** | `./scripts/demo.sh` starts FastAPI + Next.js + MLflow UI together so the presentation is one terminal command. |
+| **3D per-class accuracy bar chart** | 39 vertical bars, sorted by F1 ascending so weak classes go front-left. Bottom-5-by-F1 callout answers "what does the 0.27% wrong look like." |
+| **Optimizer landscape 3D (the killer graph)** | Loss surface with three live trajectories — SGD, Adam, **AdamW** — computed from the actual update equations in JS. Animated particle follows the AdamW path. Directly defends "why this optimizer" in Q&A. |
+| **Animated 3D architecture diagram** | EfficientNet-B0 layers as 3D blocks with animated data particle for the "walk me through inference" Q&A answer. |
+| **Test-set picker** | Dashboard tab loads images from the held-out test partition (same `seed=42` as training), grouped by crop, with one-click predict. The image was never seen by the model — defensible during demo. |
+| **One-command demo orchestration** | `./scripts/demo.sh` starts FastAPI + Next.js (+ MLflow UI optional) so the presentation is one terminal command. |

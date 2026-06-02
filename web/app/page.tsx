@@ -66,9 +66,13 @@ export default function HomePage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Diagnose a leaf</h1>
         <p className="mt-2 text-muted-foreground">
-          Upload a single leaf in clear focus. GreenVision returns the most
-          likely disease, confidence, and an evidence-cited treatment
-          recommendation.
+          This is the user interface for the GreenVision FastAPI inference
+          endpoint. Pick a leaf from the held-out test set, or upload your own
+          photo — the dashboard <code className="font-mono">POST</code>s to{" "}
+          <code className="font-mono">/api/predict</code>, which loads{" "}
+          <code className="font-mono">models:/GreenVision/Production</code> from
+          the MLflow Registry, returns disease name + confidence + cited
+          treatment recommendation, and the result renders below.
         </p>
       </div>
 

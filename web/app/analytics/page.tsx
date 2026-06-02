@@ -11,6 +11,7 @@ import { KpiCards } from "@/components/viz/kpi-cards";
 import { OptimizerLandscape3D } from "@/components/viz/optimizer-landscape-3d";
 import { PerClassBars3D } from "@/components/viz/per-class-bars-3d";
 import { PerClassTable } from "@/components/viz/per-class-table";
+import { SystemPipeline } from "@/components/viz/system-pipeline";
 import { TrainingCurves2D } from "@/components/viz/training-curves-2d";
 
 import { useTrainingData } from "@/lib/use-training-data";
@@ -56,15 +57,35 @@ export default function AnalyticsPage() {
       {data && (
         <>
           <KpiCards data={data} />
+          <p className="-mt-2 text-[11px] text-muted-foreground">
+            Source: MLflow run <code className="font-mono">{data.best_run.attempt_id ? `attempt_${data.best_run.attempt_id}` : "attempt_002"}</code> ·
+            tracking URI <code className="font-mono">file:./mlruns</code> ·
+            model registered as <code className="font-mono">{data._metadata.model_uri}</code>
+          </p>
 
-          <Tabs defaultValue="overview" className="w-full">
+          <Tabs defaultValue="architecture" className="w-full">
             <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="architecture">Architecture</TabsTrigger>
+              <TabsTrigger value="overview">Training</TabsTrigger>
               <TabsTrigger value="per-class">Per-class</TabsTrigger>
               <TabsTrigger value="confusion">Confusion</TabsTrigger>
               <TabsTrigger value="optimizer">Optimizer</TabsTrigger>
-              <TabsTrigger value="architecture">Architecture</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="architecture" className="space-y-4">
+              <Tabs defaultValue="system" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="system">System pipeline</TabsTrigger>
+                  <TabsTrigger value="model">Model (EfficientNet-B0)</TabsTrigger>
+                </TabsList>
+                <TabsContent value="system" className="pt-4">
+                  <SystemPipeline />
+                </TabsContent>
+                <TabsContent value="model" className="pt-4">
+                  <Architecture3D />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
 
             <TabsContent value="overview" className="space-y-4">
               <TrainingCurves2D epochMetrics={data.epoch_metrics} />
@@ -84,10 +105,6 @@ export default function AnalyticsPage() {
 
             <TabsContent value="optimizer">
               <OptimizerLandscape3D />
-            </TabsContent>
-
-            <TabsContent value="architecture">
-              <Architecture3D />
             </TabsContent>
           </Tabs>
 
