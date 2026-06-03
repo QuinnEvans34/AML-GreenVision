@@ -1,0 +1,392 @@
+[
+  {
+    "class_name": "Background_without_leaves",
+    "display_name": "No leaf detected",
+    "crop": "Background",
+    "is_healthy": false,
+    "is_background": true,
+    "images": [
+      "/test-samples/Background_without_leaves/image (1018).jpg"
+    ]
+  },
+  {
+    "class_name": "Apple___Apple_scab",
+    "display_name": "Apple \u2014 Apple scab",
+    "crop": "Apple",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Apple___Apple_scab/image (557).JPG"
+    ]
+  },
+  {
+    "class_name": "Apple___Black_rot",
+    "display_name": "Apple \u2014 Black rot",
+    "crop": "Apple",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Apple___Black_rot/image (411).JPG"
+    ]
+  },
+  {
+    "class_name": "Apple___Cedar_apple_rust",
+    "display_name": "Apple \u2014 Cedar apple rust",
+    "crop": "Apple",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Apple___Cedar_apple_rust/image (81).JPG"
+    ]
+  },
+  {
+    "class_name": "Apple___healthy",
+    "display_name": "Apple (healthy)",
+    "crop": "Apple",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Apple___healthy/image (148).JPG"
+    ]
+  },
+  {
+    "class_name": "Pepper,_bell___Bacterial_spot",
+    "display_name": "Bell pepper \u2014 Bacterial spot",
+    "crop": "Bell pepper",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Pepper,_bell___Bacterial_spot/image (853).JPG"
+    ]
+  },
+  {
+    "class_name": "Pepper,_bell___healthy",
+    "display_name": "Bell pepper (healthy)",
+    "crop": "Bell pepper",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Pepper,_bell___healthy/image (1016).JPG"
+    ]
+  },
+  {
+    "class_name": "Blueberry___healthy",
+    "display_name": "Blueberry (healthy)",
+    "crop": "Blueberry",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Blueberry___healthy/image (227).JPG"
+    ]
+  },
+  {
+    "class_name": "Cherry___Powdery_mildew",
+    "display_name": "Cherry \u2014 Powdery mildew",
+    "crop": "Cherry",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Cherry___Powdery_mildew/image (591).JPG"
+    ]
+  },
+  {
+    "class_name": "Cherry___healthy",
+    "display_name": "Cherry (healthy)",
+    "crop": "Cherry",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Cherry___healthy/image (269).JPG"
+    ]
+  },
+  {
+    "class_name": "Corn___Cercospora_leaf_spot Gray_leaf_spot",
+    "display_name": "Corn \u2014 Cercospora leaf spot Gray leaf spot",
+    "crop": "Corn",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Corn___Cercospora_leaf_spot Gray_leaf_spot/image (158).JPG"
+    ]
+  },
+  {
+    "class_name": "Corn___Common_rust",
+    "display_name": "Corn \u2014 Common rust",
+    "crop": "Corn",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Corn___Common_rust/image (475).JPG"
+    ]
+  },
+  {
+    "class_name": "Corn___Northern_Leaf_Blight",
+    "display_name": "Corn \u2014 Northern Leaf Blight",
+    "crop": "Corn",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Corn___Northern_Leaf_Blight/image (218).JPG"
+    ]
+  },
+  {
+    "class_name": "Corn___healthy",
+    "display_name": "Corn (healthy)",
+    "crop": "Corn",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Corn___healthy/image (107).JPG"
+    ]
+  },
+  {
+    "class_name": "Grape___Black_rot",
+    "display_name": "Grape \u2014 Black rot",
+    "crop": "Grape",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Grape___Black_rot/image (550).JPG"
+    ]
+  },
+  {
+    "class_name": "Grape___Esca_(Black_Measles)",
+    "display_name": "Grape \u2014 Esca (Black Measles)",
+    "crop": "Grape",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Grape___Esca_(Black_Measles)/image (1109).JPG"
+    ]
+  },
+  {
+    "class_name": "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)",
+    "display_name": "Grape \u2014 Leaf blight (Isariopsis Leaf Spot)",
+    "crop": "Grape",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Grape___Leaf_blight_(Isariopsis_Leaf_Spot)/image (207).JPG"
+    ]
+  },
+  {
+    "class_name": "Grape___healthy",
+    "display_name": "Grape (healthy)",
+    "crop": "Grape",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Grape___healthy/image (54).JPG"
+    ]
+  },
+  {
+    "class_name": "Orange___Haunglongbing_(Citrus_greening)",
+    "display_name": "Orange \u2014 Haunglongbing (Citrus greening)",
+    "crop": "Orange",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Orange___Haunglongbing_(Citrus_greening)/image (4050).JPG"
+    ]
+  },
+  {
+    "class_name": "Peach___Bacterial_spot",
+    "display_name": "Peach \u2014 Bacterial spot",
+    "crop": "Peach",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Peach___Bacterial_spot/image (1663).JPG"
+    ]
+  },
+  {
+    "class_name": "Peach___healthy",
+    "display_name": "Peach (healthy)",
+    "crop": "Peach",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Peach___healthy/image (149).JPG"
+    ]
+  },
+  {
+    "class_name": "Potato___Early_blight",
+    "display_name": "Potato \u2014 Early blight",
+    "crop": "Potato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Potato___Early_blight/image (603).JPG"
+    ]
+  },
+  {
+    "class_name": "Potato___Late_blight",
+    "display_name": "Potato \u2014 Late blight",
+    "crop": "Potato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Potato___Late_blight/image (278).JPG"
+    ]
+  },
+  {
+    "class_name": "Potato___healthy",
+    "display_name": "Potato (healthy)",
+    "crop": "Potato",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Potato___healthy/image (43).JPG"
+    ]
+  },
+  {
+    "class_name": "Raspberry___healthy",
+    "display_name": "Raspberry (healthy)",
+    "crop": "Raspberry",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Raspberry___healthy/image (158).JPG"
+    ]
+  },
+  {
+    "class_name": "Soybean___healthy",
+    "display_name": "Soybean (healthy)",
+    "crop": "Soybean",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Soybean___healthy/image (109).JPG"
+    ]
+  },
+  {
+    "class_name": "Squash___Powdery_mildew",
+    "display_name": "Squash \u2014 Powdery mildew",
+    "crop": "Squash",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Squash___Powdery_mildew/image (1464).JPG"
+    ]
+  },
+  {
+    "class_name": "Strawberry___Leaf_scorch",
+    "display_name": "Strawberry \u2014 Leaf scorch",
+    "crop": "Strawberry",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Strawberry___Leaf_scorch/image (1098).JPG"
+    ]
+  },
+  {
+    "class_name": "Strawberry___healthy",
+    "display_name": "Strawberry (healthy)",
+    "crop": "Strawberry",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Strawberry___healthy/image (151).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Bacterial_spot",
+    "display_name": "Tomato \u2014 Bacterial spot",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Bacterial_spot/image (710).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Early_blight",
+    "display_name": "Tomato \u2014 Early blight",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Early_blight/image (800).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Late_blight",
+    "display_name": "Tomato \u2014 Late blight",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Late_blight/image (1676).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Leaf_Mold",
+    "display_name": "Tomato \u2014 Leaf Mold",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Leaf_Mold/image (651).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Septoria_leaf_spot",
+    "display_name": "Tomato \u2014 Septoria leaf spot",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Septoria_leaf_spot/image (678).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Spider_mites Two-spotted_spider_mite",
+    "display_name": "Tomato \u2014 Spider mites Two-spotted spider mite",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Spider_mites Two-spotted_spider_mite/image (1056).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Target_Spot",
+    "display_name": "Tomato \u2014 Target Spot",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Target_Spot/image (969).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+    "display_name": "Tomato \u2014 Tomato Yellow Leaf Curl Virus",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Tomato_Yellow_Leaf_Curl_Virus/image (478).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___Tomato_mosaic_virus",
+    "display_name": "Tomato \u2014 Tomato mosaic virus",
+    "crop": "Tomato",
+    "is_healthy": false,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___Tomato_mosaic_virus/image (113).JPG"
+    ]
+  },
+  {
+    "class_name": "Tomato___healthy",
+    "display_name": "Tomato (healthy)",
+    "crop": "Tomato",
+    "is_healthy": true,
+    "is_background": false,
+    "images": [
+      "/test-samples/Tomato___healthy/image (1063).JPG"
+    ]
+  }
+]

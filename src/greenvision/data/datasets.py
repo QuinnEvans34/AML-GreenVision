@@ -1,5 +1,7 @@
 """Wiring that turns a PlantVillage ImageFolder into train/val/test DataLoaders."""
 
+from typing import Any, Callable
+
 from torch.utils.data import DataLoader, Subset
 from torchvision.datasets import ImageFolder
 
@@ -14,11 +16,12 @@ def build_dataloaders(
     batch_size: int = 64,
     num_workers: int = 4,
     seed: int = 42,
+    train_transform: Callable[[Any], Any] | None = None,
 ) -> tuple[DataLoader, DataLoader, DataLoader, list[str]]:
     """Build stratified train/val/test DataLoaders from an ImageFolder root.
 
     Two ``ImageFolder`` views over the same directory are created so that the
-    training split receives augmenting ``train_tfms`` while the validation and
+    training split receives augmenting transforms while the validation and
     test splits receive deterministic ``eval_tfms``. Both views share the same
     alphabetical class ordering, so the stratified indices are interchangeable.
     The class list is persisted to the canonical path before returning.
@@ -29,6 +32,9 @@ def build_dataloaders(
         num_workers: Worker processes per loader. ``persistent_workers`` is
             enabled only when this is greater than zero.
         seed: Seed applied via ``set_seed`` and forwarded to the split.
+        train_transform: Optional override for the training transform.
+            Defaults to ``train_tfms`` (v3 augmentation). Pass
+            ``train_tfms_robust`` for the Decision 15 v4 fine-tune.
 
     Returns:
         A ``(train_loader, val_loader, test_loader, class_names)`` tuple, where
@@ -36,7 +42,7 @@ def build_dataloaders(
     """
     set_seed(seed)
 
-    train_ds = ImageFolder(root, transform=train_tfms)
+    train_ds = ImageFolder(root, transform=train_transform or train_tfms)
     eval_ds = ImageFolder(root, transform=eval_tfms)
 
     train_idx, val_idx, test_idx = stratified_split(train_ds, seed=seed)
