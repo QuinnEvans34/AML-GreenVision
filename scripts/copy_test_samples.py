@@ -130,9 +130,14 @@ def main() -> None:
             src = Path(src_path)
             dest = class_out / src.name
             shutil.copy2(src, dest)
-            # URL relative to web/public/
-            rel = dest.relative_to(Path("web/public"))
-            urls.append(f"/{rel.as_posix()}")
+            # URL relative to web/public/ for dashboard consumption;
+            # fall back to absolute path when output is outside web/public/
+            # (e.g., when generating a local demo folder via --output-dir).
+            try:
+                rel = dest.relative_to(Path("web/public"))
+                urls.append(f"/{rel.as_posix()}")
+            except ValueError:
+                urls.append(str(dest))
             total_copied += 1
 
         entry = {

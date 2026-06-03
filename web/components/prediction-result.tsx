@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Scissors,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -375,9 +376,18 @@ function SourcesList({
 
 function InferenceFooter({ prediction }: { prediction: PredictionResponse }) {
   return (
-    <p className="text-center text-[10px] text-muted-foreground">
-      Inference: {prediction.inference_time_ms.toFixed(1)} ms · model:{" "}
-      <code className="font-mono">{prediction.model_version}</code>
-    </p>
+    <div className="space-y-1">
+      {prediction.background_removed && (
+        <p className="flex items-center justify-center gap-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+          <Scissors className="h-3 w-3" />
+          Background removed (rembg · {prediction.preprocessing_time_ms?.toFixed(0) ?? 0}ms) ·
+          Decision 14
+        </p>
+      )}
+      <p className="text-center text-[10px] text-muted-foreground">
+        Inference: {prediction.inference_time_ms.toFixed(1)} ms · model:{" "}
+        <code className="font-mono">{prediction.model_version}</code>
+      </p>
+    </div>
   );
 }

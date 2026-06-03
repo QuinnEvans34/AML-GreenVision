@@ -68,16 +68,23 @@ def format_display(raw: str) -> str:
 
 def find_attempt_runs(
     client: MlflowClient, attempt: str
-) -> tuple[str, str | None, str | None]:
-    """Locate the parent attempt run plus its phase1 / phase2 children.
+) -> tuple[str, str | None, str | None, str | None]:
+    """Locate the parent attempt run plus its phase children.
+
+    Recognizes three child run names:
+      - ``phase1`` (head warm-up — present in from-scratch attempts)
+      - ``phase2`` (gradual unfreezing — present in from-scratch attempts)
+      - ``finetune`` (Decision 15 — present in fine-tune attempts that
+        skipped Phase 1)
 
     Args:
         client: An ``MlflowClient`` pointed at the project's tracking store.
-        attempt: The attempt ID suffix, e.g. ``"002"``.
+        attempt: The attempt ID suffix, e.g. ``"002"`` or ``"003"``.
 
     Returns:
-        Tuple ``(parent_run_id, phase1_run_id, phase2_run_id)``.
-        ``phase1`` / ``phase2`` may be ``None`` if a phase was skipped.
+        Tuple ``(parent_run_id, phase1_run_id, phase2_run_id, finetune_run_id)``.
+        Any of the three child IDs may be ``None`` if the corresponding
+        phase wasn't run.
 
     Raises:
         RuntimeError: If the experiment or the named parent run can't be found.
@@ -113,7 +120,11 @@ def find_attempt_runs(
         (r.info.run_id for r in children if r.info.run_name == "phase2"),
         None,
     )
-    return parent_id, phase1, phase2
+    finetune = next(
+        (r.info.run_id for r in children if r.info.run_name == "finetune"),
+        None,
+    )
+    return parent_id, phase1, phase2, finetune
 
 
 def collect_epoch_metrics(
@@ -244,12 +255,17 @@ def main() -> None:
 
     # ── 1. Find the runs ──────────────────────────────────────────────
     print(f"→ Locating attempt_{args.attempt} run group…")
-    parent_id, phase1_id, phase2_id = find_attempt_runs(client, args.attempt)
-    print(f"  parent  : {parent_id}")
-    print(f"  phase1  : {phase1_id}")
-    print(f"  phase2  : {phase2_id}")
+    parent_id, phase1_id, phase2_id, finetune_id = find_attempt_runs(
+        client, args.attempt
+    )
+    print(f"  parent   : {parent_id}")
+    print(f"  phase1   : {phase1_id}")
+    print(f"  phase2   : {phase2_id}")
+    print(f"  finetune : {finetune_id}")
 
     # ── 2. Collect per-epoch metrics ──────────────────────────────────
+    # Walk the phases in chronological order so global_epoch indexes
+    # cumulatively across whichever phases were actually run.
     print("→ Pulling per-epoch metric history…")
     epoch_metrics: list[dict[str, Any]] = []
     global_epoch = 0
@@ -261,6 +277,11 @@ def main() -> None:
     if phase2_id is not None:
         phase2 = collect_epoch_metrics(client, phase2_id, "phase2")
         for m in phase2:
+            epoch_metrics.append({**m, "epoch": global_epoch})
+            global_epoch += 1
+    if finetune_id is not None:
+        finetune = collect_epoch_metrics(client, finetune_id, "finetune")
+        for m in finetune:
             epoch_metrics.append({**m, "epoch": global_epoch})
             global_epoch += 1
     print(f"  total epochs: {len(epoch_metrics)}")
@@ -342,6 +363,7 @@ def main() -> None:
             "parent_run_id": parent_id,
             "phase1_run_id": phase1_id,
             "phase2_run_id": phase2_id,
+            "finetune_run_id": finetune_id,
             "best_val_acc": best_val_acc,
             "best_epoch_global": best_epoch_global,
             "test_acc": test_acc,

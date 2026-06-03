@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Lock } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -63,6 +63,80 @@ export default function AboutPage() {
             <a href="/analytics" className="underline hover:text-foreground">
               Analytics → Architecture → System pipeline
             </a>.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Decision 4: Critical constants — Q&A defense card ──────────── */}
+      <Card className="border-l-4 border-l-amber-500">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-amber-600" />
+            Critical constants (locked)
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Decision 4 from the implementation guide. These values are not
+            freely tunable — they&apos;re locked to choices the rest of the
+            system depends on. Changing any of them silently corrupts every
+            prediction the model will ever make.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <ConstantRow
+            name="IMAGENET_MEAN"
+            value="[0.485, 0.456, 0.406]"
+            why="Per-channel mean used by EfficientNet-B0 at ImageNet pretraining. First conv layer's weights are calibrated for this distribution."
+            source="src/greenvision/data/transforms.py"
+          />
+          <ConstantRow
+            name="IMAGENET_STD"
+            value="[0.229, 0.224, 0.225]"
+            why="Per-channel std used at ImageNet pretraining. Same calibration argument."
+            source="src/greenvision/data/transforms.py"
+          />
+          <ConstantRow
+            name="IMG_SIZE"
+            value="224"
+            why="EfficientNet-B0's native input resolution. Used by Resize(256) → CenterCrop(224) in eval, RandomResizedCrop in train."
+            source="src/greenvision/data/transforms.py"
+          />
+          <ConstantRow
+            name="NUM_CLASSES"
+            value="39"
+            why="38 PlantVillage disease + healthy combinations + 1 Background_without_leaves negative class. Linear(1280, 39) head."
+            source="src/greenvision/models/efficientnet_head.py"
+          />
+          <ConstantRow
+            name="FEATURE_DIM"
+            value="1280"
+            why="Output of EfficientNet-B0's features block. Consumed by the classifier head: Dropout(0.3) → Linear(1280, 39)."
+            source="src/greenvision/models/efficientnet_head.py"
+          />
+          <ConstantRow
+            name="BATCH_SIZE"
+            value="64"
+            why="Chosen for Apple M-series MPS memory headroom while keeping BatchNorm running statistics stable."
+            source="scripts/train.py (--batch-size default)"
+          />
+          <ConstantRow
+            name="MAX_FILE_SIZE"
+            value="10 MB"
+            why="Upload size limit on POST /predict. Rejected with HTTP 413 if exceeded."
+            source="api/routes/predict.py"
+          />
+          <ConstantRow
+            name="MODEL_URI"
+            value='models:/GreenVision/Production'
+            why="The MLflow Registry URI the API loads at startup. The lifespan call here is the only place the API ever loads weights."
+            source="api/inference.py"
+          />
+          <Separator className="my-3" />
+          <p className="text-xs text-muted-foreground">
+            <strong>Q&A defense angle:</strong> When asked &ldquo;why
+            ImageNet normalization?&rdquo;, you point at this card and
+            explain &mdash; if you change these values, the first conv
+            layer sees inputs outside the distribution its weights were
+            calibrated for. Predictions degrade silently with no error.
           </p>
         </CardContent>
       </Card>
@@ -220,6 +294,34 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function ConstantRow({
+  name,
+  value,
+  why,
+  source,
+}: {
+  name: string;
+  value: string;
+  why: string;
+  source: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-1.5 rounded-md border bg-muted/30 p-3 lg:grid-cols-[180px_220px_1fr]">
+      <code className="font-mono text-xs font-semibold">{name}</code>
+      <code className="break-all font-mono text-xs text-amber-700 dark:text-amber-400">
+        {value}
+      </code>
+      <div className="space-y-1">
+        <p className="text-xs">{why}</p>
+        <p className="text-[10px] text-muted-foreground">
+          <span className="font-medium">Source:</span>{" "}
+          <code className="font-mono">{source}</code>
+        </p>
+      </div>
     </div>
   );
 }

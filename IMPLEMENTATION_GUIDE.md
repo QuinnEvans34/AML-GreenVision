@@ -1430,6 +1430,103 @@ npx concurrently \
 
 ---
 
+## Decision 14 — Background removal at inference (the OOD fix)
+
+> **Status:** in progress · added during W10P1 final week after the
+> professor flagged out-of-distribution failure. Full execution plan
+> in [`docs/W10_RESILIENCE_PLAN.md`](./docs/W10_RESILIENCE_PLAN.md). This
+> section gets the full Reasoning + Where-it-shows-up-in-code body once
+> Phase R4 verification confirms the approach.
+
+**What I'm deciding.** How to handle the documented domain shift from
+PlantVillage's studio-style backgrounds (uniform, neutral, single camera
+setup) to real-world field photos (grass, dirt, complex backgrounds, hand
+shadows). v3 achieves 99.73% on PlantVillage's val and test but generalizes
+poorly to outside-internet images — the model learned both leaf features
+AND the implicit "leaves on neutral backgrounds" cue.
+
+**Working choice.** 🚧 In progress.
+
+- **Approach:** `rembg` (U²-Net) background removal as an optional
+  preprocessing step before the model. The cleaned RGBA image is
+  composited onto a white background and then passed through the
+  unchanged `eval_tfms` pipeline. This shifts inference inputs toward
+  the in-distribution shape the model was trained on, without
+  modifying the model itself.
+- **Surfaced as:** a `remove_bg` Form parameter on `POST /predict`,
+  defaulting to `false`. The dashboard exposes the toggle in the upload
+  card and shows the cleaned image alongside the result.
+- **Latency budget:** ~150-300 ms for the rembg call on Apple M-series
+  with the U²-Net model. Surfaced as `preprocessing_time_ms` in the
+  response so the dashboard can render an honest "processed in N ms"
+  line.
+- **Auto-on heuristic:** test-set thumbnails skip rembg automatically
+  (they're already in-distribution). Arbitrary uploads default the
+  toggle ON because they're more likely to be field photos.
+
+**Reasoning (to be expanded after Phase R4).** The decision is to *not*
+retrain the model to handle outside backgrounds and instead shift the
+input distribution at inference. Three reasons: (1) timeline — retraining
+overnight is risky for a presentation tomorrow; (2) precedent —
+production CV systems like Apple Visual Look Up use the same approach;
+(3) honesty — the bias the v3 model learned is real; rembg makes it
+visible to the audience via the toggle, which is a stronger talking point
+than hiding the limitation.
+
+**Open implementation notes (to be filled in after R4):**
+
+- Per-image rembg latency on the demo machine: ___
+- Per-class accuracy on outside-image test set with/without rembg: ___
+- Failure modes observed (when rembg masks badly): ___
+
+---
+
+## Decision 15 — Robust-augmentation fine-tune (Track 2)
+
+> **Status:** in progress · the Track 2 upside in
+> [`docs/W10_RESILIENCE_PLAN.md`](./docs/W10_RESILIENCE_PLAN.md). Section
+> filled out fully if v4 ships to Production; otherwise this stub
+> documents the attempt and why we kept v3.
+
+**What I'm deciding.** Whether to fine-tune v3 with a more aggressive
+augmentation pipeline to improve generalization to field photos, and
+under what conditions to promote the resulting v4 to Production.
+
+**Working choice.** 🚧 In progress.
+
+- **Approach:** Fine-tune the registered v3 (load from
+  `models:/GreenVision/3`) for ~10-12 additional epochs using a new
+  `train_tfms_robust` pipeline. eval transforms unchanged so val/test
+  metrics remain comparable to v3.
+- **Augmentation additions** (vs. v3 training):
+  - `RandomResizedCrop` scale widened to `(0.5, 1.0)` from `(0.7, 1.0)`
+  - `RandomRotation` widened to 30° from 15°
+  - `ColorJitter` intensified: brightness/contrast/saturation 0.4, hue 0.15
+  - **`RandomGrayscale(p=0.10)`** — forces texture-based learning when
+    color cues are unavailable
+  - `GaussianBlur(p=0.25)` — simulates phone-photo defocus
+  - **`RandomErasing(p=0.4, scale=(0.02, 0.25), value='random')`** —
+    randomly destroys image patches (including background regions),
+    teaching the model that the surrounding context isn't required to
+    classify the leaf
+- **Promotion criteria:** v4 only replaces v3 in Production if (a)
+  PlantVillage val accuracy is ≥ 95%, AND (b) outside-image accuracy is
+  meaningfully higher than v3 + rembg on the same set.
+
+**Reasoning (to be expanded post-T4).** Augmentation alone won't solve
+the background bias — but combined with rembg, it raises the floor on
+both in-distribution and out-of-distribution performance. The
+`RandomGrayscale` + `RandomErasing` combo specifically forces the model
+to attend to texture and shape rather than relying on background-as-cue.
+
+**Open implementation notes (to be filled in after T4):**
+
+- v4 final val accuracy: ___
+- v3 vs v4 on outside images (with rembg): ___
+- Decision: promoted v4 / kept v3 — reason: ___
+
+---
+
 ## Resolved during W9A1 implementation
 
 The W9A1 training run resolved most of the "open questions" from the W8A1 design phase. Here's what got empirically validated and what remains open for future runs.

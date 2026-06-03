@@ -66,6 +66,16 @@ class PredictionResponse(BaseModel):
     model_version: str = Field(..., description="MLflow model URI")
     inference_time_ms: float
 
+    # OOD preprocessing telemetry (Decision 14)
+    background_removed: bool = Field(
+        default=False,
+        description="Whether rembg background removal was applied before inference",
+    )
+    preprocessing_time_ms: float = Field(
+        default=0.0,
+        description="Time spent in background-removal preprocessing (0 if skipped)",
+    )
+
 
 class HealthResponse(BaseModel):
     """GET /health response shape."""

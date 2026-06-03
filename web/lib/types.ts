@@ -41,6 +41,10 @@ export interface PredictionResponse {
   warnings: string[];
   model_version: string;
   inference_time_ms: number;
+  /** Decision 14 — whether rembg background removal was applied */
+  background_removed?: boolean;
+  /** Time spent in rembg preprocessing (0 if skipped) */
+  preprocessing_time_ms?: number;
 }
 
 export interface HealthResponse {
@@ -97,6 +101,8 @@ export interface BestRun {
   parent_run_id: string;
   phase1_run_id: string | null;
   phase2_run_id: string | null;
+  /** Decision 15 fine-tune child run (null for from-scratch attempts) */
+  finetune_run_id?: string | null;
   best_val_acc: number | null;
   best_epoch_global: number | null;
   test_acc: number | null;

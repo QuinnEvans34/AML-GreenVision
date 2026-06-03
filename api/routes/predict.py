@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from api.inference import MODEL_URI, predict_image
@@ -18,23 +18,29 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB (Decision 8)
 
 @router.post("/predict", response_model=PredictionResponse, tags=["inference"])
 async def predict(
-    request: Request, file: UploadFile = File(...)
+    request: Request,
+    file: UploadFile = File(...),
+    remove_bg: bool = Form(default=False),
 ) -> PredictionResponse:
     """Diagnose a leaf image and return treatment recommendation.
 
     Workflow:
     1. Size check (reject > 10 MB, reject empty uploads).
     2. PIL decode (reject undecodable files).
-    3. Run inference on the loaded Production model.
-    4. Look up the treatment entry for the predicted class.
-    5. Return the merged response.
+    3. (Optional) rembg background removal if ``remove_bg=true``.
+    4. Run inference on the loaded Production model.
+    5. Look up the treatment entry for the predicted class.
+    6. Return the merged response.
 
     Args:
         request: The FastAPI request (used to read ``app.state``).
         file: The uploaded image.
+        remove_bg: If true, apply rembg background removal before inference
+            (Decision 14 — for field photos with complex backgrounds).
 
     Returns:
-        A ``PredictionResponse`` with prediction + treatment + warnings.
+        A ``PredictionResponse`` with prediction + treatment + warnings +
+        preprocessing telemetry.
     """
     # ---- 1. Size + emptiness ----
     body = await file.read()
@@ -64,7 +70,11 @@ async def predict(
         raise HTTPException(status_code=503, detail="Model not loaded yet")
 
     result = predict_image(
-        state.model, state.class_names, state.device, pil_image
+        state.model,
+        state.class_names,
+        state.device,
+        pil_image,
+        remove_bg=remove_bg,
     )
 
     # ---- 4. Treatment merge ----
@@ -94,4 +104,6 @@ async def predict(
         warnings=result.warnings,
         model_version=MODEL_URI,
         inference_time_ms=round(result.inference_ms, 2),
+        background_removed=result.background_removed,
+        preprocessing_time_ms=round(result.preprocessing_ms, 2),
     )

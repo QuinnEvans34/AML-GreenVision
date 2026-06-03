@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   Image as ImageIcon,
   Loader2,
+  Scissors,
   Shuffle,
   Upload,
   X,
@@ -26,9 +27,12 @@ import {
 import { cn } from "@/lib/utils";
 
 interface UploadCardProps {
-  onPredict: (file: File) => void | Promise<void>;
+  onPredict: (file: File, opts: { removeBg: boolean }) => void | Promise<void>;
   isPredicting: boolean;
   disabled: boolean;
+  removeBg: boolean;
+  onRemoveBgChange: (value: boolean) => void;
+  onModeChange?: (mode: "test" | "upload") => void;
   onInvalidFile?: (reason: string) => void;
   onPreviewURLChange?: (url: string | null) => void;
 }
@@ -37,6 +41,9 @@ export function UploadCard({
   onPredict,
   isPredicting,
   disabled,
+  removeBg,
+  onRemoveBgChange,
+  onModeChange,
   onInvalidFile,
   onPreviewURLChange,
 }: UploadCardProps) {
@@ -95,7 +102,10 @@ export function UploadCard({
     try {
       const f = await sampleToFile(image_url, sample.class_name);
       setFile(f);
-      await onPredict(f);
+      // Test-set thumbnails are already in-distribution; rembg adds latency
+      // without benefit. The page-level state may still be ON if the user
+      // came from upload mode — pass false explicitly here.
+      await onPredict(f, { removeBg: false });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Could not load test sample";
       onInvalidFile?.(msg);
@@ -115,7 +125,11 @@ export function UploadCard({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <Tabs defaultValue="test" className="w-full">
+        <Tabs
+          defaultValue="test"
+          onValueChange={(v) => onModeChange?.(v as "test" | "upload")}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="test">Test set</TabsTrigger>
             <TabsTrigger value="upload">Upload</TabsTrigger>
@@ -131,6 +145,11 @@ export function UploadCard({
 
           {/* ── Upload tab ─────────────────────────────────── */}
           <TabsContent value="upload" className="space-y-3 pt-3">
+            <RembgToggle
+              value={removeBg}
+              onChange={onRemoveBgChange}
+              disabled={disabledState}
+            />
             <div
               onClick={() => !disabledState && inputRef.current?.click()}
               onDragOver={(e) => {
@@ -168,7 +187,9 @@ export function UploadCard({
               </div>
             </div>
             <Button
-              onClick={() => file && !previewLabel && onPredict(file)}
+              onClick={() =>
+                file && !previewLabel && onPredict(file, { removeBg })
+              }
               disabled={!file || !!previewLabel || disabledState}
               className="w-full"
               size="lg"
@@ -176,10 +197,12 @@ export function UploadCard({
               {isPredicting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing…
+                  {removeBg ? "Removing background + analyzing…" : "Analyzing…"}
                 </>
               ) : (
-                "Diagnose"
+                <>
+                  {removeBg ? "Diagnose (with rembg)" : "Diagnose"}
+                </>
               )}
             </Button>
           </TabsContent>
@@ -230,6 +253,67 @@ export function UploadCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// rembg toggle — inline Switch (shadcn `switch` not installed)
+// ──────────────────────────────────────────────────────────────────
+
+function RembgToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-3 transition-colors",
+        value
+          ? "border-emerald-500/50 bg-emerald-500/5"
+          : "border-border bg-muted/30",
+        disabled && "opacity-50",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => !disabled && onChange(!value)}
+        disabled={disabled}
+        className="flex w-full items-start gap-3 text-left"
+      >
+        {/* Inline Switch — toggle track + thumb */}
+        <span
+          role="switch"
+          aria-checked={value}
+          className={cn(
+            "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+            value ? "bg-emerald-500" : "bg-input",
+          )}
+        >
+          <span
+            className={cn(
+              "inline-block h-4 w-4 transform rounded-full bg-background shadow-sm transition-transform",
+              value ? "translate-x-4" : "translate-x-0.5",
+            )}
+          />
+        </span>
+        <span className="flex-1 space-y-0.5">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            <Scissors className="h-3.5 w-3.5" />
+            Remove background before inference
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            Recommended for field photos with grass, dirt, or complex
+            backgrounds. Strips the leaf onto a neutral background so the
+            model sees something close to its training distribution.
+          </span>
+        </span>
+      </button>
+    </div>
   );
 }
 

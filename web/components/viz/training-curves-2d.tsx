@@ -38,17 +38,21 @@ export function TrainingCurves2D({ epochMetrics }: TrainingCurves2DProps) {
     val_loss: m.val_loss,
   }));
 
+  // Shade Phase 1 (warmup) if present. For fine-tune attempts (Decision 15)
+  // there's no phase1, so phase1End is -0.5 and nothing renders.
   const phase1End =
     epochMetrics.filter((m) => m.phase === "phase1").length - 0.5;
+  const hasFineTune = epochMetrics.some((m) => m.phase === "finetune");
+  const description = hasFineTune
+    ? "Fine-tune from v3 · Decision 15 robust augmentation"
+    : "Phase 1 (head warm-up) shaded · Phase 2 unfreezes the backbone";
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Accuracy per epoch</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Phase 1 (head warm-up) shaded · Phase 2 unfreezes the backbone
-          </p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         </CardHeader>
         <CardContent className="h-72 pl-0">
           <ResponsiveContainer width="100%" height="100%">

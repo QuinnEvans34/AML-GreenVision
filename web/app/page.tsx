@@ -23,6 +23,11 @@ export default function HomePage() {
   const [predictionError, setPredictionError] = React.useState<string | null>(
     null,
   );
+  // Decision 14 — rembg toggle state.
+  // Auto-on for arbitrary uploads (likely field photos), auto-off for
+  // test-set thumbnails (already in-distribution). The upload card
+  // notifies us of mode changes so we can apply the heuristic.
+  const [removeBg, setRemoveBg] = React.useState(true);
 
   // Mount-time health check.
   React.useEffect(() => {
@@ -38,11 +43,14 @@ export default function HomePage() {
       });
   }, []);
 
-  async function handlePredict(file: File) {
+  async function handlePredict(
+    file: File,
+    opts: { removeBg: boolean } = { removeBg },
+  ) {
     setIsPredicting(true);
     setPredictionError(null);
     try {
-      const result = await predict(file);
+      const result = await predict(file, { removeBg: opts.removeBg });
       setPrediction(result);
       if (result.is_background) {
         toast.warning("No leaf detected — please retake the photo");
@@ -59,6 +67,13 @@ export default function HomePage() {
     } finally {
       setIsPredicting(false);
     }
+  }
+
+  // Auto-on/off heuristic per the W10 resilience plan:
+  //  • Switching to Upload tab → assume an arbitrary photo, enable rembg
+  //  • Switching to Test set → already in-distribution, disable rembg
+  function handleModeChange(mode: "test" | "upload") {
+    setRemoveBg(mode === "upload");
   }
 
   return (
@@ -106,6 +121,9 @@ export default function HomePage() {
           onPredict={handlePredict}
           isPredicting={isPredicting}
           disabled={!healthStatus?.model_loaded}
+          removeBg={removeBg}
+          onRemoveBgChange={setRemoveBg}
+          onModeChange={handleModeChange}
           onInvalidFile={(reason) => toast.error(reason)}
         />
 

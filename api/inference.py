@@ -50,6 +50,8 @@ class PredictionResult(NamedTuple):
     top_k: list[tuple[str, float]]  # [(class_name, probability), ...]
     inference_ms: float
     warnings: list[str]
+    background_removed: bool = False
+    preprocessing_ms: float = 0.0
 
 
 # ----------------------------------------------------------------------
@@ -101,6 +103,55 @@ def load_class_names() -> list[str]:
         return json.load(f)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Background removal (Decision 14 — the OOD fix)
+# ──────────────────────────────────────────────────────────────────────
+
+# Cached at module level so the U²-Net ONNX session is built once.
+_REMBG_SESSION = None
+
+
+def _get_rembg_session():
+    """Lazy-load the rembg U²-Net session on first use."""
+    global _REMBG_SESSION
+    if _REMBG_SESSION is None:
+        from rembg import new_session  # imported lazily so non-rembg paths don't pay
+
+        _REMBG_SESSION = new_session("u2net")
+    return _REMBG_SESSION
+
+
+def remove_background(pil_image: Image.Image) -> Image.Image:
+    """Strip the background from a leaf photo using rembg (U²-Net).
+
+    The returned image is the foreground composited on a white background,
+    so the downstream ``eval_tfms`` pipeline (which assumes RGB) sees a
+    studio-like input matching the PlantVillage training distribution.
+
+    Args:
+        pil_image: Input RGB image (any size).
+
+    Returns:
+        An RGB ``PIL.Image`` with the background replaced by white.
+    """
+    from rembg import remove  # lazy import to keep API startup fast
+
+    rgba = remove(
+        pil_image.convert("RGB"),
+        session=_get_rembg_session(),
+        post_process_mask=True,
+    )
+    if rgba.mode != "RGBA":
+        rgba = rgba.convert("RGBA")
+
+    # Composite on a white background so the model sees something
+    # close to its training distribution (PlantVillage uses neutral
+    # backgrounds, not transparency).
+    white = Image.new("RGB", rgba.size, (255, 255, 255))
+    white.paste(rgba, mask=rgba.split()[3])  # alpha as mask
+    return white
+
+
 # ----------------------------------------------------------------------
 # Per-request inference
 # ----------------------------------------------------------------------
@@ -143,6 +194,7 @@ def predict_image(
     class_names: list[str],
     device: torch.device,
     pil_image: Image.Image,
+    remove_bg: bool = False,
 ) -> PredictionResult:
     """Run a single-image prediction through the loaded model.
 
@@ -152,11 +204,26 @@ def predict_image(
             ``load_class_names`` (index → name).
         device: The device the model lives on.
         pil_image: Input image; will be converted to RGB.
+        remove_bg: If True, apply rembg background removal before
+            inference (Decision 14 — the OOD fix for field photos).
 
     Returns:
         A ``PredictionResult`` with the predicted class, confidence,
         top-k alternatives, timing, and any quality warnings.
     """
+    # ── Optional background removal (Decision 14) ──
+    preprocessing_ms = 0.0
+    background_removed = False
+    if remove_bg:
+        t_pre = time.perf_counter()
+        try:
+            pil_image = remove_background(pil_image)
+            background_removed = True
+        except Exception as exc:
+            # Don't fail the whole request if rembg has issues — log + proceed
+            print(f"WARN: rembg failed, proceeding without it: {exc}")
+        preprocessing_ms = (time.perf_counter() - t_pre) * 1000.0
+
     warnings = _quality_warnings(pil_image)
 
     t0 = time.perf_counter()
@@ -189,4 +256,6 @@ def predict_image(
         top_k=top_k,
         inference_ms=elapsed_ms,
         warnings=warnings,
+        background_removed=background_removed,
+        preprocessing_ms=preprocessing_ms,
     )

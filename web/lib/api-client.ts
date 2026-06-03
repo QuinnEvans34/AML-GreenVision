@@ -38,9 +38,20 @@ export async function health(): Promise<HealthResponse> {
   return res.json();
 }
 
-export async function predict(file: File): Promise<PredictionResponse> {
+export interface PredictOptions {
+  /** Decision 14 — apply rembg background removal before inference */
+  removeBg?: boolean;
+}
+
+export async function predict(
+  file: File,
+  options: PredictOptions = {},
+): Promise<PredictionResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (options.removeBg) {
+    form.append("remove_bg", "true");
+  }
 
   let res: Response;
   try {

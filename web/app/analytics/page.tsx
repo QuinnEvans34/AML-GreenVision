@@ -13,6 +13,7 @@ import { PerClassBars3D } from "@/components/viz/per-class-bars-3d";
 import { PerClassTable } from "@/components/viz/per-class-table";
 import { SystemPipeline } from "@/components/viz/system-pipeline";
 import { TrainingCurves2D } from "@/components/viz/training-curves-2d";
+import { TuningStory } from "@/components/viz/tuning-story";
 
 import { useTrainingData } from "@/lib/use-training-data";
 
@@ -64,12 +65,13 @@ export default function AnalyticsPage() {
           </p>
 
           <Tabs defaultValue="architecture" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
               <TabsTrigger value="architecture">Architecture</TabsTrigger>
               <TabsTrigger value="overview">Training</TabsTrigger>
               <TabsTrigger value="per-class">Per-class</TabsTrigger>
               <TabsTrigger value="confusion">Confusion</TabsTrigger>
               <TabsTrigger value="optimizer">Optimizer</TabsTrigger>
+              <TabsTrigger value="tuning">Tuning</TabsTrigger>
             </TabsList>
 
             <TabsContent value="architecture" className="space-y-4">
@@ -105,6 +107,10 @@ export default function AnalyticsPage() {
 
             <TabsContent value="optimizer">
               <OptimizerLandscape3D />
+            </TabsContent>
+
+            <TabsContent value="tuning">
+              <TuningStory />
             </TabsContent>
           </Tabs>
 
