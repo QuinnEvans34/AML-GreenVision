@@ -11,6 +11,12 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 pillow>=10.2
 
+# OOD preprocessing (Decision 14 — added during W10P1 final week)
+# rembg is a U²-Net foreground extractor used to strip backgrounds from
+# field photos before inference. Pulls onnxruntime as a transitive dep.
+rembg>=2.0
+onnxruntime>=1.17
+
 # Data / utilities
 numpy>=1.26
 pandas>=2.2
