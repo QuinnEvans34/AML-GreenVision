@@ -58,3 +58,28 @@ logs/
 .env
 .env.*
 !.env.example
+
+# --- Next.js / Node (web/) ---
+# The Next.js scaffold should ship a web/.gitignore but we don't rely on it;
+# ignore the heavy generated stuff at the root so nothing leaks into the repo.
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/dist/
+web/.vercel/
+web/.env*.local
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+web/.turbo/
+web/coverage/
+web/*.log
+web/.DS_Store
+
+# --- Local-only demo / test images ---
+# Test set sampled from PlantVillage for demo browsing (reproducible from
+# scripts/copy_test_samples.py with seed=42).
+data/test_demo/
+# Internet leaf photos Quinn collected for OOD testing — not part of the
+# training data and not redistributable.
+data/outside_data/
